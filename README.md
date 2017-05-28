@@ -28,6 +28,20 @@ linearizable.
 See [`porcupine_test.go`](porcupine-test.go) for examples on how to write
 models and histories.
 
+## Citation
+
+If you use Porcupine in any way in academic work, please cite the following:
+
+```
+@misc{athalye2017porcupine,
+  author = {Anish Athalye},
+  title = {Porcupine: A fast linearizability checker in {Go}},
+  year = {2017},
+  howpublished = {\url{https://github.com/anishathalye/porcupine}},
+  note = {commit xxxxxxx}
+}
+```
+
 ## License
 
 Copyright (c) 2017 Anish Athalye. Released under the MIT License. See
