@@ -11,8 +11,9 @@ func TestRegisterModel(t *testing.T) {
 	// output
 	type registerOutput int // we don't care about return value for write
 	registerModel := Model{
-		Partition: func(history []Operation) [][]Operation { return [][]Operation{history} },
-		Init:      func() interface{} { return 0 },
+		Partition:      NoPartition,
+		PartitionEvent: NoPartitionEvent,
+		Init:           func() interface{} { return 0 },
 		Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
 			st := state.(int)
 			inp := input.(registerInput)
@@ -35,7 +36,21 @@ func TestRegisterModel(t *testing.T) {
 		Operation{registerInput{false, 0}, 25, 100, 75},
 		Operation{registerInput{false, 0}, 30, 0, 60},
 	}
-	res := Check(registerModel, ops)
+	res := CheckOperations(registerModel, ops)
+	if res != true {
+		t.Fatal("expected operations to be linearizable")
+	}
+
+	// same example as above, but with Event
+	events := []Event{
+		Event{CallEvent, registerInput{true, 100}, 0},
+		Event{CallEvent, registerInput{false, 0}, 1},
+		Event{CallEvent, registerInput{false, 0}, 2},
+		Event{ReturnEvent, 0, 2},
+		Event{ReturnEvent, 100, 1},
+		Event{ReturnEvent, 0, 0},
+	}
+	res = CheckEvents(registerModel, events)
 	if res != true {
 		t.Fatal("expected operations to be linearizable")
 	}
@@ -45,7 +60,21 @@ func TestRegisterModel(t *testing.T) {
 		Operation{registerInput{false, 0}, 10, 200, 30},
 		Operation{registerInput{false, 0}, 40, 0, 90},
 	}
-	res = Check(registerModel, ops)
+	res = CheckOperations(registerModel, ops)
+	if res != false {
+		t.Fatal("expected operations to not be linearizable")
+	}
+
+	// same example as above, but with Event
+	events = []Event{
+		Event{CallEvent, registerInput{true, 200}, 0},
+		Event{CallEvent, registerInput{false, 0}, 1},
+		Event{ReturnEvent, 200, 1},
+		Event{CallEvent, registerInput{false, 0}, 2},
+		Event{ReturnEvent, 0, 2},
+		Event{ReturnEvent, 0, 0},
+	}
+	res = CheckEvents(registerModel, events)
 	if res != false {
 		t.Fatal("expected operations to not be linearizable")
 	}

@@ -78,8 +78,19 @@ func length(n *node) int {
 	return l
 }
 
-func makeLinkedEntries(history []Operation) *node {
-	entries := makeEntries(history)
+func convertEntries(events []Event) []entry {
+	var entries []entry
+	for _, elem := range events {
+		kind := callEntry
+		if elem.Kind == ReturnEvent {
+			kind = returnEntry
+		}
+		entries = append(entries, entry{kind, elem.Value, elem.Id, -1})
+	}
+	return entries
+}
+
+func makeLinkedEntries(entries []entry) *node {
 	var root *node = nil
 	match := make(map[int]*node)
 	for i := len(entries) - 1; i >= 0; i-- {
@@ -205,12 +216,29 @@ func checkSingle(model Model, subhistory *node) bool {
 	return true
 }
 
-func Check(model Model, history []Operation) bool {
+func CheckOperations(model Model, history []Operation) bool {
 	partitions := model.Partition(history)
 	ok := true
 	results := make(chan bool)
 	for _, subhistory := range partitions {
-		l := makeLinkedEntries(subhistory)
+		l := makeLinkedEntries(makeEntries(subhistory))
+		go func() {
+			results <- checkSingle(model, l)
+		}()
+	}
+	for range partitions {
+		result := <-results
+		ok = ok && result
+	}
+	return ok
+}
+
+func CheckEvents(model Model, history []Event) bool {
+	partitions := model.PartitionEvent(history)
+	ok := true
+	results := make(chan bool)
+	for _, subhistory := range partitions {
+		l := makeLinkedEntries(convertEntries(subhistory))
 		go func() {
 			results <- checkSingle(model, l)
 		}()
