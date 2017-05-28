@@ -21,10 +21,20 @@ type Event struct {
 }
 
 type Model struct {
+	// Partition functions, such that a history is linearizable if an only
+	// if each partition is linearizable. If you don't want to implement
+	// this, you can always use the `NoPartition` functions implemented
+	// below.
 	Partition      func(history []Operation) [][]Operation
 	PartitionEvent func(history []Event) [][]Event
-	Init           func() interface{}
-	Step           func(state interface{}, input interface{}, output interface{}) (bool, interface{})
+	// Initial state of the system.
+	Init func() interface{}
+	// Step function for the system. Returns whether or not the system
+	// could take this step with the given inputs and outputs and also
+	// returns the new state. This should not mutate the existing state.
+	Step func(state interface{}, input interface{}, output interface{}) (bool, interface{})
+	// Equality on states. If you are using a simple data type for states,
+	// you can use the `ShallowEqual` function implemented below.
 	Equal func(state1, state2 interface{}) bool
 }
 
