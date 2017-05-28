@@ -2,7 +2,6 @@ package porcupine
 
 import (
 	"fmt"
-	"reflect"
 	"sort"
 )
 
@@ -114,9 +113,9 @@ type cacheEntry struct {
 	state      interface{}
 }
 
-func cacheContains(cache []cacheEntry, entry cacheEntry) bool {
-	for _, elem := range cache {
-		if reflect.DeepEqual(elem, entry) {
+func cacheContains(model Model, cache map[uint][]cacheEntry, entry cacheEntry) bool {
+	for _, elem := range cache[entry.linearized.popcnt()] {
+		if entry.linearized.equals(elem.linearized) && model.Equal(entry.state, elem.state) {
 			return true
 		}
 	}
@@ -160,8 +159,7 @@ func printList(n *node) {
 func checkSingle(model Model, subhistory *node) bool {
 	n := length(subhistory) / 2
 	linearized := newBitset(n)
-	// TODO use a better data structure than a list to avoid linear search
-	var cache []cacheEntry
+	cache := make(map[uint][]cacheEntry) // map from popcount to cache entry
 	var calls []callsEntry
 
 	state := model.Init()
@@ -174,8 +172,9 @@ func checkSingle(model Model, subhistory *node) bool {
 			if ok {
 				newLinearized := linearized.clone().set(entry.id)
 				newCacheEntry := cacheEntry{newLinearized, newState}
-				if !cacheContains(cache, newCacheEntry) {
-					cache = append(cache, newCacheEntry)
+				if !cacheContains(model, cache, newCacheEntry) {
+					pop := newLinearized.popcnt()
+					cache[pop] = append(cache[pop], newCacheEntry)
 					calls = append(calls, callsEntry{entry, state})
 					state = newState
 					linearized.set(entry.id)

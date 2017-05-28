@@ -25,6 +25,7 @@ type Model struct {
 	PartitionEvent func(history []Event) [][]Event
 	Init           func() interface{}
 	Step           func(state interface{}, input interface{}, output interface{}) (bool, interface{})
+	Equal func(state1, state2 interface{}) bool
 }
 
 func NoPartition(history []Operation) [][]Operation {
@@ -33,4 +34,8 @@ func NoPartition(history []Operation) [][]Operation {
 
 func NoPartitionEvent(history []Event) [][]Event {
 	return [][]Event{history}
+}
+
+func ShallowEqual(state1, state2 interface{}) bool {
+	return state1 == state2
 }

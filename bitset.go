@@ -40,3 +40,27 @@ func (b bitset) get(pos uint) bool {
 	major, minor := bitsetIndex(pos)
 	return b[major]&(1<<minor) != 0
 }
+
+func (b bitset) popcnt() uint {
+	total := uint(0)
+	for _, v := range b {
+		v = (v & 0x5555555555555555) + ((v & 0xAAAAAAAAAAAAAAAA) >> 1)
+		v = (v & 0x3333333333333333) + ((v & 0xCCCCCCCCCCCCCCCC) >> 2)
+		v = (v & 0x0F0F0F0F0F0F0F0F) + ((v & 0xF0F0F0F0F0F0F0F0) >> 4)
+		v *= 0x0101010101010101
+		total += uint((v >> 56) & 0xFF)
+	}
+	return total
+}
+
+func (b bitset) equals(b2 bitset) bool {
+	if len(b) != len(b) {
+		return false
+	}
+	for i := range b {
+		if b[i] != b2[i] {
+			return false
+		}
+	}
+	return true
+}

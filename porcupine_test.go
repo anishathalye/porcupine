@@ -35,6 +35,7 @@ func TestRegisterModel(t *testing.T) {
 				return true, inp.value
 			}
 		},
+		Equal: ShallowEqual,
 	}
 
 	// examples taken from http://nil.csail.mit.edu/6.824/2017/quizzes/q2-17-ans.pdf
@@ -128,6 +129,7 @@ func getEtcdModel() Model {
 				return ok, result
 			}
 		},
+		Equal: ShallowEqual,
 	}
 }
 
