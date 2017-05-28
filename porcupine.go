@@ -3,6 +3,7 @@ package porcupine
 import (
 	"fmt"
 	"sort"
+	"sync/atomic"
 )
 
 type entryKind bool
@@ -156,7 +157,7 @@ func printList(n *node) {
 	fmt.Println("]")
 }
 
-func checkSingle(model Model, subhistory *node) bool {
+func checkSingle(model Model, subhistory *node, kill *int32) bool {
 	n := length(subhistory) / 2
 	linearized := newBitset(n)
 	cache := make(map[uint][]cacheEntry) // map from popcount to cache entry
@@ -166,6 +167,9 @@ func checkSingle(model Model, subhistory *node) bool {
 	headEntry := insertBefore(&node{value: nil, match: nil, id: ^uint(0)}, subhistory)
 	entry := subhistory
 	for headEntry.next != nil {
+		if atomic.LoadInt32(kill) != 0 {
+			return false
+		}
 		if entry.match != nil {
 			matching := entry.match // the return entry
 			ok, newState := model.Step(state, entry.value, matching.value)
@@ -206,15 +210,19 @@ func CheckOperations(model Model, history []Operation) bool {
 	partitions := model.Partition(history)
 	ok := true
 	results := make(chan bool)
+	kill := int32(0)
 	for _, subhistory := range partitions {
 		l := makeLinkedEntries(makeEntries(subhistory))
 		go func() {
-			results <- checkSingle(model, l)
+			results <- checkSingle(model, l, &kill)
 		}()
 	}
 	for range partitions {
 		result := <-results
 		ok = ok && result
+		if !ok {
+			atomic.StoreInt32(&kill, 1)
+		}
 	}
 	return ok
 }
@@ -223,15 +231,19 @@ func CheckEvents(model Model, history []Event) bool {
 	partitions := model.PartitionEvent(history)
 	ok := true
 	results := make(chan bool)
+	kill := int32(0)
 	for _, subhistory := range partitions {
 		l := makeLinkedEntries(convertEntries(subhistory))
 		go func() {
-			results <- checkSingle(model, l)
+			results <- checkSingle(model, l, &kill)
 		}()
 	}
 	for range partitions {
 		result := <-results
 		ok = ok && result
+		if !ok {
+			atomic.StoreInt32(&kill, 1)
+		}
 	}
 	return ok
 }
