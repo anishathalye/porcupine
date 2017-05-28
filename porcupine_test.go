@@ -146,6 +146,7 @@ func parseJepsenLog(t *testing.T, filename string) []Event {
 	returnRead, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:ok\s+:read\s+(nil|\d+)$`)
 	returnWrite, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:ok\s+:write\s+(\d+)$`)
 	returnCas, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:(ok|fail)\s+:cas\s+\[(\d+)\s+(\d+)\]$`)
+	timeoutRead, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:fail\s+:read\s+:timed-out$`)
 
 	var events []Event = nil
 
@@ -209,6 +210,15 @@ func parseJepsenLog(t *testing.T, filename string) []Event {
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
 			events = append(events, Event{ReturnEvent, etcdOutput{ok: args[2] == "ok"}, matchId})
+		case timeoutRead.MatchString(line):
+			// timing out a read and then continuing operations is fine
+			// we could just delete the read from the events, but we do this the lazy way
+			args := timeoutRead.FindStringSubmatch(line)
+			proc, _ := strconv.Atoi(args[1])
+			matchId := procIdMap[proc]
+			delete(procIdMap, proc)
+			// okay to put the return here in the history
+			events = append(events, Event{ReturnEvent, etcdOutput{unknown: true}, matchId})
 		}
 	}
 
