@@ -16,7 +16,7 @@ const (
 type entry struct {
 	kind  entryKind
 	value interface{}
-	id    int
+	id    uint
 	time  int64
 }
 
@@ -36,7 +36,7 @@ func (a byTime) Less(i, j int) bool {
 
 func makeEntries(history []Operation) []entry {
 	var entries []entry = nil
-	id := 0
+	id := uint(0)
 	for _, elem := range history {
 		entries = append(entries, entry{
 			callEntry, elem.Input, id, elem.Call})
@@ -51,7 +51,7 @@ func makeEntries(history []Operation) []entry {
 type node struct {
 	value interface{}
 	match *node // call if match is nil, otherwise return
-	id    int
+	id    uint
 	next  *node
 	prev  *node
 }
@@ -69,8 +69,8 @@ func insertBefore(n *node, mark *node) *node {
 	return n
 }
 
-func length(n *node) int {
-	l := 0
+func length(n *node) uint {
+	l := uint(0)
 	for n != nil {
 		n = n.next
 		l++
@@ -92,7 +92,7 @@ func convertEntries(events []Event) []entry {
 
 func makeLinkedEntries(entries []entry) *node {
 	var root *node = nil
-	match := make(map[int]*node)
+	match := make(map[uint]*node)
 	for i := len(entries) - 1; i >= 0; i-- {
 		elem := entries[i]
 		if elem.kind == returnEntry {
@@ -110,16 +110,8 @@ func makeLinkedEntries(entries []entry) *node {
 }
 
 type cacheEntry struct {
-	linearized map[int]bool
+	linearized bitset
 	state      interface{}
-}
-
-func copyBitset(bitset map[int]bool) map[int]bool {
-	copied := make(map[int]bool)
-	for k, v := range bitset {
-		copied[k] = v
-	}
-	return copied
 }
 
 func cacheContains(cache []cacheEntry, entry cacheEntry) bool {
@@ -167,31 +159,26 @@ func printList(n *node) {
 
 func checkSingle(model Model, subhistory *node) bool {
 	n := length(subhistory) / 2
-	// TODO use a proper bitset for linearized
-	linearized := make(map[int]bool)
-	for i := 0; i < n; i++ {
-		linearized[i] = false
-	}
+	linearized := newBitset(n)
 	// TODO use a better data structure than a list to avoid linear search
 	var cache []cacheEntry
 	var calls []callsEntry
 
 	state := model.Init()
-	headEntry := insertBefore(&node{value: nil, match: nil, id: -1}, subhistory)
+	headEntry := insertBefore(&node{value: nil, match: nil, id: ^uint(0)}, subhistory)
 	entry := subhistory
 	for headEntry.next != nil {
 		if entry.match != nil {
 			matching := entry.match // the return entry
 			ok, newState := model.Step(state, entry.value, matching.value)
 			if ok {
-				newLinearized := copyBitset(linearized)
-				newLinearized[entry.id] = true
+				newLinearized := linearized.clone().set(entry.id)
 				newCacheEntry := cacheEntry{newLinearized, newState}
 				if !cacheContains(cache, newCacheEntry) {
 					cache = append(cache, newCacheEntry)
 					calls = append(calls, callsEntry{entry, state})
 					state = newState
-					linearized[entry.id] = true
+					linearized.set(entry.id)
 					lift(entry)
 					entry = headEntry.next
 				} else {
@@ -207,7 +194,7 @@ func checkSingle(model Model, subhistory *node) bool {
 			callsTop := calls[len(calls)-1]
 			entry = callsTop.entry
 			state = callsTop.state
-			linearized[entry.id] = false
+			linearized.clear(entry.id)
 			calls = calls[:len(calls)-1]
 			unlift(entry)
 			entry = entry.next

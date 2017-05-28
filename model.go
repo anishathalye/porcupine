@@ -17,7 +17,7 @@ const (
 type Event struct {
 	Kind  EventKind
 	Value interface{}
-	Id    int
+	Id    uint
 }
 
 type Model struct {

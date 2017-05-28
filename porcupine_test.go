@@ -150,8 +150,8 @@ func parseJepsenLog(t *testing.T, filename string) []Event {
 
 	var events []Event = nil
 
-	id := 0
-	procIdMap := make(map[int]int)
+	id := uint(0)
+	procIdMap := make(map[int]uint)
 	for {
 		lineBytes, isPrefix, err := reader.ReadLine()
 		if err == io.EOF {
