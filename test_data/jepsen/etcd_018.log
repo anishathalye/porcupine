@@ -1,0 +1,166 @@
+INFO  jepsen.util - 4	:invoke	:read	nil
+INFO  jepsen.util - 3	:invoke	:write	4
+INFO  jepsen.util - 0	:invoke	:write	4
+INFO  jepsen.util - 2	:invoke	:write	2
+INFO  jepsen.util - 4	:ok	:read	nil
+INFO  jepsen.util - 1	:invoke	:cas	[2 0]
+INFO  jepsen.util - 0	:ok	:write	4
+INFO  jepsen.util - 2	:ok	:write	2
+INFO  jepsen.util - 3	:ok	:write	4
+INFO  jepsen.util - 1	:fail	:cas	[2 0]
+INFO  jepsen.util - 4	:invoke	:read	nil
+INFO  jepsen.util - 0	:invoke	:cas	[0 0]
+INFO  jepsen.util - 4	:ok	:read	4
+INFO  jepsen.util - 0	:fail	:cas	[0 0]
+INFO  jepsen.util - 2	:invoke	:write	2
+INFO  jepsen.util - 3	:invoke	:read	nil
+INFO  jepsen.util - 1	:invoke	:cas	[0 0]
+INFO  jepsen.util - 3	:ok	:read	4
+INFO  jepsen.util - 2	:ok	:write	2
+INFO  jepsen.util - 1	:fail	:cas	[0 0]
+INFO  jepsen.util - 4	:invoke	:cas	[3 2]
+INFO  jepsen.util - 4	:fail	:cas	[3 2]
+INFO  jepsen.util - 0	:invoke	:read	nil
+INFO  jepsen.util - 0	:ok	:read	2
+INFO  jepsen.util - 3	:invoke	:cas	[0 4]
+INFO  jepsen.util - 2	:invoke	:cas	[0 1]
+INFO  jepsen.util - 3	:fail	:cas	[0 4]
+INFO  jepsen.util - 1	:invoke	:write	0
+INFO  jepsen.util - 2	:fail	:cas	[0 1]
+INFO  jepsen.util - 1	:ok	:write	0
+INFO  jepsen.util - 4	:invoke	:cas	[2 1]
+INFO  jepsen.util - 0	:invoke	:cas	[3 0]
+INFO  jepsen.util - 4	:fail	:cas	[2 1]
+INFO  jepsen.util - 0	:fail	:cas	[3 0]
+INFO  jepsen.util - 3	:invoke	:cas	[2 3]
+INFO  jepsen.util - 2	:invoke	:write	1
+INFO  jepsen.util - 3	:fail	:cas	[2 3]
+INFO  jepsen.util - 1	:invoke	:write	3
+INFO  jepsen.util - 2	:ok	:write	1
+INFO  jepsen.util - 1	:ok	:write	3
+INFO  jepsen.util - 4	:invoke	:write	3
+INFO  jepsen.util - 4	:ok	:write	3
+INFO  jepsen.util - 0	:invoke	:read	nil
+INFO  jepsen.util - 0	:ok	:read	3
+INFO  jepsen.util - 3	:invoke	:read	nil
+INFO  jepsen.util - 3	:ok	:read	3
+INFO  jepsen.util - 2	:invoke	:cas	[2 1]
+INFO  jepsen.util - 1	:invoke	:write	2
+INFO  jepsen.util - 4	:invoke	:write	1
+INFO  jepsen.util - 0	:invoke	:write	2
+INFO  jepsen.util - 3	:invoke	:write	1
+INFO  jepsen.util - 2	:info	:cas	:timed-out
+INFO  jepsen.util - 1	:info	:write	:timed-out
+INFO  jepsen.util - 3	:ok	:write	1
+INFO  jepsen.util - 4	:info	:write	:timed-out
+INFO  jepsen.util - 0	:info	:write	:timed-out
+INFO  jepsen.util - 7	:invoke	:write	0
+INFO  jepsen.util - 6	:invoke	:cas	[2 0]
+INFO  jepsen.util - 3	:invoke	:write	1
+INFO  jepsen.util - 6	:fail	:cas	[2 0]
+INFO  jepsen.util - 3	:ok	:write	1
+INFO  jepsen.util - 9	:invoke	:cas	[0 1]
+INFO  jepsen.util - 5	:invoke	:write	2
+INFO  jepsen.util - 5	:ok	:write	2
+INFO  jepsen.util - 7	:info	:write	:timed-out
+INFO  jepsen.util - 6	:invoke	:write	3
+INFO  jepsen.util - 6	:ok	:write	3
+INFO  jepsen.util - 3	:invoke	:read	nil
+INFO  jepsen.util - 3	:ok	:read	3
+INFO  jepsen.util - 9	:info	:cas	:timed-out
+INFO  jepsen.util - 5	:invoke	:cas	[2 3]
+INFO  jepsen.util - 5	:fail	:cas	[2 3]
+INFO  jepsen.util - 12	:invoke	:write	0
+INFO  jepsen.util - 6	:invoke	:cas	[1 1]
+INFO  jepsen.util - 6	:fail	:cas	[1 1]
+INFO  jepsen.util - 3	:invoke	:cas	[4 4]
+INFO  jepsen.util - 3	:fail	:cas	[4 4]
+INFO  jepsen.util - 14	:invoke	:read	nil
+INFO  jepsen.util - 14	:ok	:read	3
+INFO  jepsen.util - 5	:invoke	:cas	[3 2]
+INFO  jepsen.util - 12	:info	:write	:timed-out
+INFO  jepsen.util - 5	:ok	:cas	[3 2]
+INFO  jepsen.util - 6	:invoke	:write	1
+INFO  jepsen.util - 6	:ok	:write	1
+INFO  jepsen.util - 3	:invoke	:cas	[3 3]
+INFO  jepsen.util - 3	:fail	:cas	[3 3]
+INFO  jepsen.util - 14	:invoke	:write	4
+INFO  jepsen.util - 17	:invoke	:read	nil
+INFO  jepsen.util - 17	:ok	:read	1
+INFO  jepsen.util - 5	:invoke	:cas	[1 4]
+INFO  jepsen.util - 6	:invoke	:write	4
+INFO  jepsen.util - 6	:ok	:write	4
+INFO  jepsen.util - 5	:fail	:cas	[1 4]
+INFO  jepsen.util - 3	:invoke	:write	0
+INFO  jepsen.util - 3	:ok	:write	0
+INFO  jepsen.util - 14	:info	:write	:timed-out
+INFO  jepsen.util - 17	:invoke	:cas	[1 1]
+INFO  jepsen.util - 17	:fail	:cas	[1 1]
+INFO  jepsen.util - 6	:invoke	:read	nil
+INFO  jepsen.util - 6	:ok	:read	0
+INFO  jepsen.util - 5	:invoke	:write	2
+INFO  jepsen.util - 5	:ok	:write	2
+INFO  jepsen.util - 3	:invoke	:read	nil
+INFO  jepsen.util - 3	:ok	:read	2
+INFO  jepsen.util - 19	:invoke	:cas	[2 1]
+INFO  jepsen.util - 17	:invoke	:cas	[3 4]
+INFO  jepsen.util - 6	:invoke	:read	nil
+INFO  jepsen.util - 6	:ok	:read	2
+INFO  jepsen.util - 5	:invoke	:read	nil
+INFO  jepsen.util - 5	:ok	:read	2
+INFO  jepsen.util - 3	:invoke	:cas	[1 1]
+INFO  jepsen.util - 19	:info	:cas	:timed-out
+INFO  jepsen.util - 17	:info	:cas	:timed-out
+INFO  jepsen.util - 6	:invoke	:read	nil
+INFO  jepsen.util - 6	:ok	:read	2
+INFO  jepsen.util - 5	:invoke	:cas	[2 2]
+INFO  jepsen.util - 3	:info	:cas	:timed-out
+INFO  jepsen.util - 24	:invoke	:write	4
+INFO  jepsen.util - 5	:ok	:cas	[2 2]
+INFO  jepsen.util - 22	:invoke	:cas	[3 1]
+INFO  jepsen.util - 24	:ok	:write	4
+INFO  jepsen.util - 6	:invoke	:cas	[3 3]
+INFO  jepsen.util - 22	:fail	:cas	[3 1]
+INFO  jepsen.util - 6	:fail	:cas	[3 3]
+INFO  jepsen.util - 8	:invoke	:read	nil
+INFO  jepsen.util - 8	:ok	:read	4
+INFO  jepsen.util - 5	:invoke	:read	nil
+INFO  jepsen.util - 5	:ok	:read	4
+INFO  jepsen.util - 24	:invoke	:read	nil
+INFO  jepsen.util - 24	:ok	:read	4
+INFO  jepsen.util - 22	:invoke	:read	nil
+INFO  jepsen.util - 6	:invoke	:write	0
+INFO  jepsen.util - 22	:ok	:read	4
+INFO  jepsen.util - 8	:invoke	:cas	[0 3]
+INFO  jepsen.util - 8	:fail	:cas	[0 3]
+INFO  jepsen.util - 5	:invoke	:cas	[0 0]
+INFO  jepsen.util - 5	:fail	:cas	[0 0]
+INFO  jepsen.util - 24	:invoke	:read	nil
+INFO  jepsen.util - 24	:ok	:read	4
+INFO  jepsen.util - 6	:info	:write	:timed-out
+INFO  jepsen.util - 22	:invoke	:cas	[0 2]
+INFO  jepsen.util - 22	:fail	:cas	[0 2]
+INFO  jepsen.util - 8	:invoke	:read	nil
+INFO  jepsen.util - 8	:ok	:read	4
+INFO  jepsen.util - 5	:invoke	:cas	[4 3]
+INFO  jepsen.util - 5	:ok	:cas	[4 3]
+INFO  jepsen.util - 24	:invoke	:read	nil
+INFO  jepsen.util - 24	:ok	:read	4
+INFO  jepsen.util - 11	:invoke	:cas	[3 2]
+INFO  jepsen.util - 22	:invoke	:cas	[2 1]
+INFO  jepsen.util - 8	:invoke	:write	2
+INFO  jepsen.util - 8	:ok	:write	2
+INFO  jepsen.util - 22	:fail	:cas	[2 1]
+INFO  jepsen.util - 5	:invoke	:write	1
+INFO  jepsen.util - 5	:ok	:write	1
+INFO  jepsen.util - 24	:invoke	:cas	[3 1]
+INFO  jepsen.util - 11	:info	:cas	:timed-out
+INFO  jepsen.util - 8	:invoke	:write	0
+INFO  jepsen.util - 22	:invoke	:write	3
+INFO  jepsen.util - 8	:ok	:write	0
+INFO  jepsen.util - 22	:ok	:write	3
+INFO  jepsen.util - 5	:invoke	:cas	[4 0]
+INFO  jepsen.util - 5	:fail	:cas	[4 0]
+INFO  jepsen.util - 24	:info	:cas	:timed-out
+INFO  jepsen.util - 16	:invoke	:read	nil
+INFO  jepsen.util - 16	:ok	:read	4
