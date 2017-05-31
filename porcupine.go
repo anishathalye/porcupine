@@ -206,7 +206,21 @@ func checkSingle(model Model, subhistory *node, kill *int32) bool {
 	return true
 }
 
+func fillDefault(model Model) Model {
+	if model.Partition == nil {
+		model.Partition = NoPartition
+	}
+	if model.PartitionEvent == nil {
+		model.PartitionEvent = NoPartitionEvent
+	}
+	if model.Equal == nil {
+		model.Equal = ShallowEqual
+	}
+	return model
+}
+
 func CheckOperations(model Model, history []Operation) bool {
+	model = fillDefault(model)
 	partitions := model.Partition(history)
 	ok := true
 	results := make(chan bool)
@@ -228,6 +242,7 @@ func CheckOperations(model Model, history []Operation) bool {
 }
 
 func CheckEvents(model Model, history []Event) bool {
+	model = fillDefault(model)
 	partitions := model.PartitionEvent(history)
 	ok := true
 	results := make(chan bool)

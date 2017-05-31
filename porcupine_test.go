@@ -20,9 +20,7 @@ func TestRegisterModel(t *testing.T) {
 	// output
 	type registerOutput int // we don't care about return value for write
 	registerModel := Model{
-		Partition:      NoPartition,
-		PartitionEvent: NoPartitionEvent,
-		Init:           func() interface{} { return 0 },
+		Init: func() interface{} { return 0 },
 		Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
 			st := state.(int)
 			inp := input.(registerInput)
@@ -35,7 +33,6 @@ func TestRegisterModel(t *testing.T) {
 				return true, inp.value
 			}
 		},
-		Equal: ShallowEqual,
 	}
 
 	// examples taken from http://nil.csail.mit.edu/6.824/2017/quizzes/q2-17-ans.pdf
@@ -105,9 +102,7 @@ type etcdOutput struct {
 
 func getEtcdModel() Model {
 	return Model{
-		Partition:      NoPartition,
-		PartitionEvent: NoPartitionEvent,
-		Init:           func() interface{} { return -1000000 }, // -1000000 corresponds with nil
+		Init: func() interface{} { return -1000000 }, // -1000000 corresponds with nil
 		Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
 			st := state.(int)
 			inp := input.(etcdInput)
@@ -129,7 +124,6 @@ func getEtcdModel() Model {
 				return ok, result
 			}
 		},
-		Equal: ShallowEqual,
 	}
 }
 
