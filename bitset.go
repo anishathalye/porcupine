@@ -62,7 +62,7 @@ func (b bitset) hash() uint64 {
 }
 
 func (b bitset) equals(b2 bitset) bool {
-	if len(b) != len(b) {
+	if len(b) != len(b2) {
 		return false
 	}
 	for i := range b {
