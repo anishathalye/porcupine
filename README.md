@@ -108,7 +108,7 @@ ok := porcupine.CheckEvents(registerModel, events)
 // returns false
 ```
 
-See [`porcupine_test.go`](porcupine-test.go) for more examples on how to write
+See [`porcupine_test.go`](porcupine_test.go) for more examples on how to write
 models and histories.
 
 ## Notes
