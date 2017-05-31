@@ -114,8 +114,8 @@ type cacheEntry struct {
 	state      interface{}
 }
 
-func cacheContains(model Model, cache map[uint][]cacheEntry, entry cacheEntry) bool {
-	for _, elem := range cache[entry.linearized.popcnt()] {
+func cacheContains(model Model, cache map[uint64][]cacheEntry, entry cacheEntry) bool {
+	for _, elem := range cache[entry.linearized.hash()] {
 		if entry.linearized.equals(elem.linearized) && model.Equal(entry.state, elem.state) {
 			return true
 		}
@@ -160,7 +160,7 @@ func printList(n *node) {
 func checkSingle(model Model, subhistory *node, kill *int32) bool {
 	n := length(subhistory) / 2
 	linearized := newBitset(n)
-	cache := make(map[uint][]cacheEntry) // map from popcount to cache entry
+	cache := make(map[uint64][]cacheEntry) // map from popcount to cache entry
 	var calls []callsEntry
 
 	state := model.Init()
@@ -177,7 +177,7 @@ func checkSingle(model Model, subhistory *node, kill *int32) bool {
 				newLinearized := linearized.clone().set(entry.id)
 				newCacheEntry := cacheEntry{newLinearized, newState}
 				if !cacheContains(model, cache, newCacheEntry) {
-					pop := newLinearized.popcnt()
+					pop := newLinearized.hash()
 					cache[pop] = append(cache[pop], newCacheEntry)
 					calls = append(calls, callsEntry{entry, state})
 					state = newState

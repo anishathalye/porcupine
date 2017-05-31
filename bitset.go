@@ -53,6 +53,14 @@ func (b bitset) popcnt() uint {
 	return total
 }
 
+func (b bitset) hash() uint64 {
+	hash := uint64(b.popcnt())
+	for _, v := range b {
+		hash ^= v
+	}
+	return hash
+}
+
 func (b bitset) equals(b2 bitset) bool {
 	if len(b) != len(b) {
 		return false
