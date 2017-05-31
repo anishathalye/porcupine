@@ -235,7 +235,6 @@ func checkJepsen(t *testing.T, logNum int, correct bool) {
 	t.Parallel()
 	etcdModel := getEtcdModel()
 	events := parseJepsenLog(t, fmt.Sprintf("test_data/jepsen/etcd_%03d.log", logNum))
-	t.Logf("etcd log with %d entries, expecting result %t", len(events), correct)
 	res := CheckEvents(etcdModel, events)
 	if res != correct {
 		t.Fatalf("expected output %t, got output %t", correct, res)
