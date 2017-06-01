@@ -1,8 +1,8 @@
 # Porcupine
 
 Porcupine is a fast linearizability checker for testing the correctness of
-distributed systems. It takes sequential specification as executable Go code,
-along with a concurrent history, and determines whether the history is
+distributed systems. It takes a sequential specification as executable Go code,
+along with a concurrent history, and it determines whether the history is
 linearizable with respect to the sequential specification.
 
 Porcupine implements the algorithm described in [Faster linearizability
@@ -28,9 +28,9 @@ linearizable.
 
 ## Example
 
-Suppose we're testing linearizability for operations on a register supporting
-read and write operations that's initialized to `0`. We write a sequential
-specification for a register like this:
+Suppose we're testing linearizability for operations on a read/write register
+that's initialized to `0`. We write a sequential specification for the register
+like this:
 
 ```go
 type registerInput struct {
