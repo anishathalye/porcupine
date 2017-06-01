@@ -1,7 +1,6 @@
 package porcupine
 
 import (
-	"fmt"
 	"sort"
 	"sync/atomic"
 )
@@ -148,19 +147,10 @@ func unlift(entry *node) {
 	entry.next.prev = entry
 }
 
-func printList(n *node) {
-	fmt.Print("[")
-	for n != nil {
-		fmt.Printf("%v, ", *n)
-		n = n.next
-	}
-	fmt.Println("]")
-}
-
 func checkSingle(model Model, subhistory *node, kill *int32) bool {
 	n := length(subhistory) / 2
 	linearized := newBitset(n)
-	cache := make(map[uint64][]cacheEntry) // map from popcount to cache entry
+	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
 	var calls []callsEntry
 
 	state := model.Init()
@@ -177,8 +167,8 @@ func checkSingle(model Model, subhistory *node, kill *int32) bool {
 				newLinearized := linearized.clone().set(entry.id)
 				newCacheEntry := cacheEntry{newLinearized, newState}
 				if !cacheContains(model, cache, newCacheEntry) {
-					pop := newLinearized.hash()
-					cache[pop] = append(cache[pop], newCacheEntry)
+					hash := newLinearized.hash()
+					cache[hash] = append(cache[hash], newCacheEntry)
 					calls = append(calls, callsEntry{entry, state})
 					state = newState
 					linearized.set(entry.id)

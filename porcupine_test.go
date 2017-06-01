@@ -39,9 +39,9 @@ func TestRegisterModel(t *testing.T) {
 	// section VII
 
 	ops := []Operation{
-		Operation{registerInput{true, 100}, 0, 0, 100},
-		Operation{registerInput{false, 0}, 25, 100, 75},
-		Operation{registerInput{false, 0}, 30, 0, 60},
+		{registerInput{true, 100}, 0, 0, 100},
+		{registerInput{false, 0}, 25, 100, 75},
+		{registerInput{false, 0}, 30, 0, 60},
 	}
 	res := CheckOperations(registerModel, ops)
 	if res != true {
@@ -50,12 +50,12 @@ func TestRegisterModel(t *testing.T) {
 
 	// same example as above, but with Event
 	events := []Event{
-		Event{CallEvent, registerInput{true, 100}, 0},
-		Event{CallEvent, registerInput{false, 0}, 1},
-		Event{CallEvent, registerInput{false, 0}, 2},
-		Event{ReturnEvent, 0, 2},
-		Event{ReturnEvent, 100, 1},
-		Event{ReturnEvent, 0, 0},
+		{CallEvent, registerInput{true, 100}, 0},
+		{CallEvent, registerInput{false, 0}, 1},
+		{CallEvent, registerInput{false, 0}, 2},
+		{ReturnEvent, 0, 2},
+		{ReturnEvent, 100, 1},
+		{ReturnEvent, 0, 0},
 	}
 	res = CheckEvents(registerModel, events)
 	if res != true {
@@ -63,9 +63,9 @@ func TestRegisterModel(t *testing.T) {
 	}
 
 	ops = []Operation{
-		Operation{registerInput{true, 200}, 0, 0, 100},
-		Operation{registerInput{false, 0}, 10, 200, 30},
-		Operation{registerInput{false, 0}, 40, 0, 90},
+		{registerInput{true, 200}, 0, 0, 100},
+		{registerInput{false, 0}, 10, 200, 30},
+		{registerInput{false, 0}, 40, 0, 90},
 	}
 	res = CheckOperations(registerModel, ops)
 	if res != false {
@@ -74,12 +74,12 @@ func TestRegisterModel(t *testing.T) {
 
 	// same example as above, but with Event
 	events = []Event{
-		Event{CallEvent, registerInput{true, 200}, 0},
-		Event{CallEvent, registerInput{false, 0}, 1},
-		Event{ReturnEvent, 200, 1},
-		Event{CallEvent, registerInput{false, 0}, 2},
-		Event{ReturnEvent, 0, 2},
-		Event{ReturnEvent, 0, 0},
+		{CallEvent, registerInput{true, 200}, 0},
+		{CallEvent, registerInput{false, 0}, 1},
+		{ReturnEvent, 200, 1},
+		{CallEvent, registerInput{false, 0}, 2},
+		{ReturnEvent, 0, 2},
+		{ReturnEvent, 0, 0},
 	}
 	res = CheckEvents(registerModel, events)
 	if res != false {
