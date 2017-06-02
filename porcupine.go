@@ -77,6 +77,22 @@ func length(n *node) uint {
 	return l
 }
 
+func renumber(events []Event) []Event {
+	var e []Event
+	m := make(map[uint]uint) // renumbering
+	id := uint(0)
+	for _, v := range events {
+		if r, ok := m[v.Id]; ok {
+			e = append(e, Event{v.Kind, v.Value, r})
+		} else {
+			e = append(e, Event{v.Kind, v.Value, id})
+			m[v.Id] = id
+			id++
+		}
+	}
+	return e
+}
+
 func convertEntries(events []Event) []entry {
 	var entries []entry
 	for _, elem := range events {
@@ -238,7 +254,7 @@ func CheckEvents(model Model, history []Event) bool {
 	results := make(chan bool)
 	kill := int32(0)
 	for _, subhistory := range partitions {
-		l := makeLinkedEntries(convertEntries(subhistory))
+		l := makeLinkedEntries(convertEntries(renumber(subhistory)))
 		go func() {
 			results <- checkSingle(model, l, &kill)
 		}()
