@@ -127,10 +127,10 @@ func getEtcdModel() Model {
 	}
 }
 
-func parseJepsenLog(t *testing.T, filename string) []Event {
+func parseJepsenLog(filename string) []Event {
 	file, err := os.Open(filename)
 	if err != nil {
-		t.Fatal("can't open file")
+		panic("can't open file")
 	}
 	defer file.Close()
 
@@ -153,10 +153,10 @@ func parseJepsenLog(t *testing.T, filename string) []Event {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			t.Fatal("error while reading file: " + err.Error())
+			panic("error while reading file: " + err.Error())
 		}
 		if isPrefix {
-			t.Fatal("can't handle isPrefix")
+			panic("can't handle isPrefix")
 		}
 		line := string(lineBytes)
 
@@ -228,7 +228,7 @@ func parseJepsenLog(t *testing.T, filename string) []Event {
 func checkJepsen(t *testing.T, logNum int, correct bool) {
 	t.Parallel()
 	etcdModel := getEtcdModel()
-	events := parseJepsenLog(t, fmt.Sprintf("test_data/jepsen/etcd_%03d.log", logNum))
+	events := parseJepsenLog(fmt.Sprintf("test_data/jepsen/etcd_%03d.log", logNum))
 	res := CheckEvents(etcdModel, events)
 	if res != correct {
 		t.Fatalf("expected output %t, got output %t", correct, res)
@@ -643,4 +643,426 @@ func TestEtcdJepsen101(t *testing.T) {
 
 func TestEtcdJepsen102(t *testing.T) {
 	checkJepsen(t, 102, true)
+}
+
+func benchJepsen(b *testing.B, logNum int, correct bool) {
+	etcdModel := getEtcdModel()
+	events := parseJepsenLog(fmt.Sprintf("test_data/jepsen/etcd_%03d.log", logNum))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		res := CheckEvents(etcdModel, events)
+		if res != correct {
+			b.Fatalf("expected output %t, got output %t", correct, res)
+		}
+	}
+}
+
+func BenchmarkEtcdJepsen000(b *testing.B) {
+	benchJepsen(b, 0, false)
+}
+
+func BenchmarkEtcdJepsen001(b *testing.B) {
+	benchJepsen(b, 1, false)
+}
+
+func BenchmarkEtcdJepsen002(b *testing.B) {
+	benchJepsen(b, 2, true)
+}
+
+func BenchmarkEtcdJepsen003(b *testing.B) {
+	benchJepsen(b, 3, false)
+}
+
+func BenchmarkEtcdJepsen004(b *testing.B) {
+	benchJepsen(b, 4, false)
+}
+
+func BenchmarkEtcdJepsen005(b *testing.B) {
+	benchJepsen(b, 5, true)
+}
+
+func BenchmarkEtcdJepsen006(b *testing.B) {
+	benchJepsen(b, 6, false)
+}
+
+func BenchmarkEtcdJepsen007(b *testing.B) {
+	benchJepsen(b, 7, true)
+}
+
+func BenchmarkEtcdJepsen008(b *testing.B) {
+	benchJepsen(b, 8, false)
+}
+
+func BenchmarkEtcdJepsen009(b *testing.B) {
+	benchJepsen(b, 9, false)
+}
+
+func BenchmarkEtcdJepsen010(b *testing.B) {
+	benchJepsen(b, 10, false)
+}
+
+func BenchmarkEtcdJepsen011(b *testing.B) {
+	benchJepsen(b, 11, false)
+}
+
+func BenchmarkEtcdJepsen012(b *testing.B) {
+	benchJepsen(b, 12, false)
+}
+
+func BenchmarkEtcdJepsen013(b *testing.B) {
+	benchJepsen(b, 13, false)
+}
+
+func BenchmarkEtcdJepsen014(b *testing.B) {
+	benchJepsen(b, 14, false)
+}
+
+func BenchmarkEtcdJepsen015(b *testing.B) {
+	benchJepsen(b, 15, false)
+}
+
+func BenchmarkEtcdJepsen016(b *testing.B) {
+	benchJepsen(b, 16, false)
+}
+
+func BenchmarkEtcdJepsen017(b *testing.B) {
+	benchJepsen(b, 17, false)
+}
+
+func BenchmarkEtcdJepsen018(b *testing.B) {
+	benchJepsen(b, 18, true)
+}
+
+func BenchmarkEtcdJepsen019(b *testing.B) {
+	benchJepsen(b, 19, false)
+}
+
+func BenchmarkEtcdJepsen020(b *testing.B) {
+	benchJepsen(b, 20, false)
+}
+
+func BenchmarkEtcdJepsen021(b *testing.B) {
+	benchJepsen(b, 21, false)
+}
+
+func BenchmarkEtcdJepsen022(b *testing.B) {
+	benchJepsen(b, 22, false)
+}
+
+func BenchmarkEtcdJepsen023(b *testing.B) {
+	benchJepsen(b, 23, false)
+}
+
+func BenchmarkEtcdJepsen024(b *testing.B) {
+	benchJepsen(b, 24, false)
+}
+
+func BenchmarkEtcdJepsen025(b *testing.B) {
+	benchJepsen(b, 25, true)
+}
+
+func BenchmarkEtcdJepsen026(b *testing.B) {
+	benchJepsen(b, 26, false)
+}
+
+func BenchmarkEtcdJepsen027(b *testing.B) {
+	benchJepsen(b, 27, false)
+}
+
+func BenchmarkEtcdJepsen028(b *testing.B) {
+	benchJepsen(b, 28, false)
+}
+
+func BenchmarkEtcdJepsen029(b *testing.B) {
+	benchJepsen(b, 29, false)
+}
+
+func BenchmarkEtcdJepsen030(b *testing.B) {
+	benchJepsen(b, 30, false)
+}
+
+func BenchmarkEtcdJepsen031(b *testing.B) {
+	benchJepsen(b, 31, true)
+}
+
+func BenchmarkEtcdJepsen032(b *testing.B) {
+	benchJepsen(b, 32, false)
+}
+
+func BenchmarkEtcdJepsen033(b *testing.B) {
+	benchJepsen(b, 33, false)
+}
+
+func BenchmarkEtcdJepsen034(b *testing.B) {
+	benchJepsen(b, 34, false)
+}
+
+func BenchmarkEtcdJepsen035(b *testing.B) {
+	benchJepsen(b, 35, false)
+}
+
+func BenchmarkEtcdJepsen036(b *testing.B) {
+	benchJepsen(b, 36, false)
+}
+
+func BenchmarkEtcdJepsen037(b *testing.B) {
+	benchJepsen(b, 37, false)
+}
+
+func BenchmarkEtcdJepsen038(b *testing.B) {
+	benchJepsen(b, 38, true)
+}
+
+func BenchmarkEtcdJepsen039(b *testing.B) {
+	benchJepsen(b, 39, false)
+}
+
+func BenchmarkEtcdJepsen040(b *testing.B) {
+	benchJepsen(b, 40, false)
+}
+
+func BenchmarkEtcdJepsen041(b *testing.B) {
+	benchJepsen(b, 41, false)
+}
+
+func BenchmarkEtcdJepsen042(b *testing.B) {
+	benchJepsen(b, 42, false)
+}
+
+func BenchmarkEtcdJepsen043(b *testing.B) {
+	benchJepsen(b, 43, false)
+}
+
+func BenchmarkEtcdJepsen044(b *testing.B) {
+	benchJepsen(b, 44, false)
+}
+
+func BenchmarkEtcdJepsen045(b *testing.B) {
+	benchJepsen(b, 45, true)
+}
+
+func BenchmarkEtcdJepsen046(b *testing.B) {
+	benchJepsen(b, 46, false)
+}
+
+func BenchmarkEtcdJepsen047(b *testing.B) {
+	benchJepsen(b, 47, false)
+}
+
+func BenchmarkEtcdJepsen048(b *testing.B) {
+	benchJepsen(b, 48, true)
+}
+
+func BenchmarkEtcdJepsen049(b *testing.B) {
+	benchJepsen(b, 49, true)
+}
+
+func BenchmarkEtcdJepsen050(b *testing.B) {
+	benchJepsen(b, 50, false)
+}
+
+func BenchmarkEtcdJepsen051(b *testing.B) {
+	benchJepsen(b, 51, true)
+}
+
+func BenchmarkEtcdJepsen052(b *testing.B) {
+	benchJepsen(b, 52, false)
+}
+
+func BenchmarkEtcdJepsen053(b *testing.B) {
+	benchJepsen(b, 53, true)
+}
+
+func BenchmarkEtcdJepsen054(b *testing.B) {
+	benchJepsen(b, 54, false)
+}
+
+func BenchmarkEtcdJepsen055(b *testing.B) {
+	benchJepsen(b, 55, false)
+}
+
+func BenchmarkEtcdJepsen056(b *testing.B) {
+	benchJepsen(b, 56, true)
+}
+
+func BenchmarkEtcdJepsen057(b *testing.B) {
+	benchJepsen(b, 57, false)
+}
+
+func BenchmarkEtcdJepsen058(b *testing.B) {
+	benchJepsen(b, 58, false)
+}
+
+func BenchmarkEtcdJepsen059(b *testing.B) {
+	benchJepsen(b, 59, false)
+}
+
+func BenchmarkEtcdJepsen060(b *testing.B) {
+	benchJepsen(b, 60, false)
+}
+
+func BenchmarkEtcdJepsen061(b *testing.B) {
+	benchJepsen(b, 61, false)
+}
+
+func BenchmarkEtcdJepsen062(b *testing.B) {
+	benchJepsen(b, 62, false)
+}
+
+func BenchmarkEtcdJepsen063(b *testing.B) {
+	benchJepsen(b, 63, false)
+}
+
+func BenchmarkEtcdJepsen064(b *testing.B) {
+	benchJepsen(b, 64, false)
+}
+
+func BenchmarkEtcdJepsen065(b *testing.B) {
+	benchJepsen(b, 65, false)
+}
+
+func BenchmarkEtcdJepsen066(b *testing.B) {
+	benchJepsen(b, 66, false)
+}
+
+func BenchmarkEtcdJepsen067(b *testing.B) {
+	benchJepsen(b, 67, true)
+}
+
+func BenchmarkEtcdJepsen068(b *testing.B) {
+	benchJepsen(b, 68, false)
+}
+
+func BenchmarkEtcdJepsen069(b *testing.B) {
+	benchJepsen(b, 69, false)
+}
+
+func BenchmarkEtcdJepsen070(b *testing.B) {
+	benchJepsen(b, 70, false)
+}
+
+func BenchmarkEtcdJepsen071(b *testing.B) {
+	benchJepsen(b, 71, false)
+}
+
+func BenchmarkEtcdJepsen072(b *testing.B) {
+	benchJepsen(b, 72, false)
+}
+
+func BenchmarkEtcdJepsen073(b *testing.B) {
+	benchJepsen(b, 73, false)
+}
+
+func BenchmarkEtcdJepsen074(b *testing.B) {
+	benchJepsen(b, 74, false)
+}
+
+func BenchmarkEtcdJepsen075(b *testing.B) {
+	benchJepsen(b, 75, true)
+}
+
+func BenchmarkEtcdJepsen076(b *testing.B) {
+	benchJepsen(b, 76, true)
+}
+
+func BenchmarkEtcdJepsen077(b *testing.B) {
+	benchJepsen(b, 77, false)
+}
+
+func BenchmarkEtcdJepsen078(b *testing.B) {
+	benchJepsen(b, 78, false)
+}
+
+func BenchmarkEtcdJepsen079(b *testing.B) {
+	benchJepsen(b, 79, false)
+}
+
+func BenchmarkEtcdJepsen080(b *testing.B) {
+	benchJepsen(b, 80, true)
+}
+
+func BenchmarkEtcdJepsen081(b *testing.B) {
+	benchJepsen(b, 81, false)
+}
+
+func BenchmarkEtcdJepsen082(b *testing.B) {
+	benchJepsen(b, 82, false)
+}
+
+func BenchmarkEtcdJepsen083(b *testing.B) {
+	benchJepsen(b, 83, false)
+}
+
+func BenchmarkEtcdJepsen084(b *testing.B) {
+	benchJepsen(b, 84, false)
+}
+
+func BenchmarkEtcdJepsen085(b *testing.B) {
+	benchJepsen(b, 85, false)
+}
+
+func BenchmarkEtcdJepsen086(b *testing.B) {
+	benchJepsen(b, 86, false)
+}
+
+func BenchmarkEtcdJepsen087(b *testing.B) {
+	benchJepsen(b, 87, true)
+}
+
+func BenchmarkEtcdJepsen088(b *testing.B) {
+	benchJepsen(b, 88, false)
+}
+
+func BenchmarkEtcdJepsen089(b *testing.B) {
+	benchJepsen(b, 89, false)
+}
+
+func BenchmarkEtcdJepsen090(b *testing.B) {
+	benchJepsen(b, 90, false)
+}
+
+func BenchmarkEtcdJepsen091(b *testing.B) {
+	benchJepsen(b, 91, false)
+}
+
+func BenchmarkEtcdJepsen092(b *testing.B) {
+	benchJepsen(b, 92, true)
+}
+
+func BenchmarkEtcdJepsen093(b *testing.B) {
+	benchJepsen(b, 93, false)
+}
+
+func BenchmarkEtcdJepsen094(b *testing.B) {
+	benchJepsen(b, 94, false)
+}
+
+// etcd cluster failed to start up in test 95
+
+func BenchmarkEtcdJepsen096(b *testing.B) {
+	benchJepsen(b, 96, false)
+}
+
+func BenchmarkEtcdJepsen097(b *testing.B) {
+	benchJepsen(b, 97, false)
+}
+
+func BenchmarkEtcdJepsen098(b *testing.B) {
+	benchJepsen(b, 98, true)
+}
+
+func BenchmarkEtcdJepsen099(b *testing.B) {
+	benchJepsen(b, 99, false)
+}
+
+func BenchmarkEtcdJepsen100(b *testing.B) {
+	benchJepsen(b, 100, true)
+}
+
+func BenchmarkEtcdJepsen101(b *testing.B) {
+	benchJepsen(b, 101, true)
+}
+
+func BenchmarkEtcdJepsen102(b *testing.B) {
+	benchJepsen(b, 102, true)
 }
