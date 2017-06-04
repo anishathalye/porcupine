@@ -11,7 +11,10 @@ optimization of the algorithm described in [Testing for
 Linearizability][linearizability-testing].
 
 Porcupine is faster and can handle more histories than [Knossos][knossos]'s
-linearizability checker.
+linearizability checker. Testing on the data in `test_data/jepsen/`, Porcupine
+is generally **1,000x**-**10,000x** faster and has a much smaller memory
+footprint. On histories where it can take advantage of P-compositionality,
+Porcupine can be millions of times faster.
 
 ## Usage
 
