@@ -3,6 +3,7 @@ package porcupine
 import (
 	"sort"
 	"sync/atomic"
+	"time"
 )
 
 type entryKind bool
@@ -226,6 +227,12 @@ func fillDefault(model Model) Model {
 }
 
 func CheckOperations(model Model, history []Operation) bool {
+	return CheckOperationsTimeout(model, history, 0)
+}
+
+// timeout = 0 means no timeout
+// if this operation times out, then a false positive is possible
+func CheckOperationsTimeout(model Model, history []Operation, timeout time.Duration) bool {
 	model = fillDefault(model)
 	partitions := model.Partition(history)
 	ok := true
@@ -237,17 +244,38 @@ func CheckOperations(model Model, history []Operation) bool {
 			results <- checkSingle(model, l, &kill)
 		}()
 	}
-	for range partitions {
-		result := <-results
-		ok = ok && result
-		if !ok {
-			atomic.StoreInt32(&kill, 1)
+	var timeoutChan <-chan time.Time
+	if timeout > 0 {
+		timeoutChan = time.After(timeout)
+	}
+	count := 0
+loop:
+	for {
+		select {
+		case result := <-results:
+			ok = ok && result
+			if !ok {
+				atomic.StoreInt32(&kill, 1)
+				break loop
+			}
+			count++
+			if count >= len(partitions) {
+				break loop
+			}
+		case <-timeoutChan:
+			break loop // if we time out, we might get a false positive
 		}
 	}
 	return ok
 }
 
 func CheckEvents(model Model, history []Event) bool {
+	return CheckEventsTimeout(model, history, 0)
+}
+
+// timeout = 0 means no timeout
+// if this operation times out, then a false positive is possible
+func CheckEventsTimeout(model Model, history []Event, timeout time.Duration) bool {
 	model = fillDefault(model)
 	partitions := model.PartitionEvent(history)
 	ok := true
@@ -259,11 +287,26 @@ func CheckEvents(model Model, history []Event) bool {
 			results <- checkSingle(model, l, &kill)
 		}()
 	}
-	for range partitions {
-		result := <-results
-		ok = ok && result
-		if !ok {
-			atomic.StoreInt32(&kill, 1)
+	var timeoutChan <-chan time.Time
+	if timeout > 0 {
+		timeoutChan = time.After(timeout)
+	}
+	count := 0
+loop:
+	for {
+		select {
+		case result := <-results:
+			ok = ok && result
+			if !ok {
+				atomic.StoreInt32(&kill, 1)
+				break loop
+			}
+			count++
+			if count >= len(partitions) {
+				break loop
+			}
+		case <-timeoutChan:
+			break loop // if we time out, we might get a false positive
 		}
 	}
 	return ok

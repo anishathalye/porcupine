@@ -1068,8 +1068,8 @@ func BenchmarkEtcdJepsen102(b *testing.B) {
 }
 
 type kvInput struct {
-	op uint8 // 0 => get, 1 => put, 2 => append
-	key string
+	op    uint8 // 0 => get, 1 => put, 2 => append
+	key   string
 	value string
 }
 
@@ -1120,7 +1120,6 @@ func getKvModel() Model {
 		},
 	}
 }
-
 
 func parseKvLog(filename string) []Event {
 	file, err := os.Open(filename)
