@@ -134,7 +134,7 @@ If you use Porcupine in any way in academic work, please cite the following:
 
 ## License
 
-Copyright (c) 2017 Anish Athalye. Released under the MIT License. See
+Copyright (c) 2017-2018 Anish Athalye. Released under the MIT License. See
 [LICENSE.md][license] for details.
 
 [faster-linearizability-checking]: https://arxiv.org/pdf/1504.00204.pdf
