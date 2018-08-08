@@ -1201,6 +1201,7 @@ func parseKvLog(filename string) []Event {
 }
 
 func checkKv(t *testing.T, logName string, correct bool) {
+	t.Parallel()
 	kvModel := getKvModel()
 	events := parseKvLog(fmt.Sprintf("test_data/kv/%s.txt", logName))
 	res := CheckEvents(kvModel, events)
