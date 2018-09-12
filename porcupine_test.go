@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"testing"
 )
@@ -1232,4 +1234,102 @@ func TestKv50ClientsOk(t *testing.T) {
 
 func TestKv50ClientsBad(t *testing.T) {
 	checkKv(t, "c50-bad", false)
+}
+
+func TestSetModel(t *testing.T) {
+	t.Parallel()
+
+	// Set Model is from Jepsen/Knossos Set.
+	// A set supports add and read operations, and we must ensure that
+	// each read can't read duplicated or unknown values from the set
+
+	// inputs
+	type setInput struct {
+		op    bool // false = read, true = write
+		value int
+	}
+
+	// outputs
+	type setOutput struct {
+		values  []int // read
+		unknown bool  // read
+	}
+
+	setModel := Model{
+		Init: func() interface{} { return []int{} },
+		Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
+			st := state.([]int)
+			inp := input.(setInput)
+			out := output.(setOutput)
+
+			if inp.op == true {
+				// always returns true for write
+				index := sort.SearchInts(st, inp.value)
+				if index >= len(st) || st[index] != inp.value {
+					// value not in the set
+					st = append(st, inp.value)
+					sort.Ints(st)
+				}
+				return true, st
+			}
+
+			sort.Ints(out.values)
+			return out.unknown || reflect.DeepEqual(st, out.values), out.values
+		},
+		Equal: func(state1, state2 interface{}) bool {
+			return reflect.DeepEqual(state1, state2)
+		},
+	}
+
+	events := []Event{
+		{CallEvent, setInput{true, 100}, 0},
+		{CallEvent, setInput{true, 0}, 1},
+		{CallEvent, setInput{false, 0}, 2},
+		{ReturnEvent, setOutput{[]int{100}, false}, 2},
+		{ReturnEvent, setOutput{}, 1},
+		{ReturnEvent, setOutput{}, 0},
+	}
+	res := CheckEvents(setModel, events)
+	if res != true {
+		t.Fatal("expected operations to be linearizable")
+	}
+
+	events = []Event{
+		{CallEvent, setInput{true, 100}, 0},
+		{CallEvent, setInput{true, 110}, 1},
+		{CallEvent, setInput{false, 0}, 2},
+		{ReturnEvent, setOutput{[]int{100, 110}, false}, 2},
+		{ReturnEvent, setOutput{}, 1},
+		{ReturnEvent, setOutput{}, 0},
+	}
+	res = CheckEvents(setModel, events)
+	if res != true {
+		t.Fatal("expected operations to be linearizable")
+	}
+
+	events = []Event{
+		{CallEvent, setInput{true, 100}, 0},
+		{CallEvent, setInput{true, 110}, 1},
+		{CallEvent, setInput{false, 0}, 2},
+		{ReturnEvent, setOutput{[]int{}, true}, 2},
+		{ReturnEvent, setOutput{}, 1},
+		{ReturnEvent, setOutput{}, 0},
+	}
+	res = CheckEvents(setModel, events)
+	if res != true {
+		t.Fatal("expected operations to be linearizable")
+	}
+
+	events = []Event{
+		{CallEvent, setInput{true, 100}, 0},
+		{CallEvent, setInput{true, 110}, 1},
+		{CallEvent, setInput{false, 0}, 2},
+		{ReturnEvent, setOutput{[]int{100, 100, 110}, false}, 2},
+		{ReturnEvent, setOutput{}, 1},
+		{ReturnEvent, setOutput{}, 0},
+	}
+	res = CheckEvents(setModel, events)
+	if res == true {
+		t.Fatal("expected operations not to be linearizable")
+	}
 }
