@@ -118,6 +118,11 @@ models and histories.
 
 Porcupine's API is not stable yet. Please vendor this package before using it.
 
+If Porcupine runs really slowly on your model/history, it may be inevitable,
+due to state space explosion. See [this
+issue](https://github.com/anishathalye/porcupine/issues/6) for a discussion of
+this challenge in the context of a particular model and history.
+
 ## Citation
 
 If you use Porcupine in any way in academic work, please cite the following:
