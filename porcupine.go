@@ -226,23 +226,14 @@ func fillDefault(model Model) Model {
 	return model
 }
 
-func CheckOperations(model Model, history []Operation) bool {
-	return CheckOperationsTimeout(model, history, 0)
-}
-
-// timeout = 0 means no timeout
-// if this operation times out, then a false positive is possible
-func CheckOperationsTimeout(model Model, history []Operation, timeout time.Duration) bool {
-	model = fillDefault(model)
-	partitions := model.Partition(history)
+func checkParallel(model Model, history []*node, timeout time.Duration) bool {
 	ok := true
 	results := make(chan bool)
 	kill := int32(0)
-	for _, subhistory := range partitions {
-		l := makeLinkedEntries(makeEntries(subhistory))
-		go func() {
-			results <- checkSingle(model, l, &kill)
-		}()
+	for _, subhistory := range history {
+		go func(subhistory *node) {
+			results <- checkSingle(model, subhistory, &kill)
+		}(subhistory)
 	}
 	var timeoutChan <-chan time.Time
 	if timeout > 0 {
@@ -259,7 +250,7 @@ loop:
 				break loop
 			}
 			count++
-			if count >= len(partitions) {
+			if count >= len(history) {
 				break loop
 			}
 		case <-timeoutChan:
@@ -267,6 +258,22 @@ loop:
 		}
 	}
 	return ok
+}
+
+func CheckOperations(model Model, history []Operation) bool {
+	return CheckOperationsTimeout(model, history, 0)
+}
+
+// timeout = 0 means no timeout
+// if this operation times out, then a false positive is possible
+func CheckOperationsTimeout(model Model, history []Operation, timeout time.Duration) bool {
+	model = fillDefault(model)
+	partitions := model.Partition(history)
+	l := make([]*node, len(partitions))
+	for i, subhistory := range partitions {
+		l[i] = makeLinkedEntries(makeEntries(subhistory))
+	}
+	return checkParallel(model, l, timeout)
 }
 
 func CheckEvents(model Model, history []Event) bool {
@@ -278,36 +285,9 @@ func CheckEvents(model Model, history []Event) bool {
 func CheckEventsTimeout(model Model, history []Event, timeout time.Duration) bool {
 	model = fillDefault(model)
 	partitions := model.PartitionEvent(history)
-	ok := true
-	results := make(chan bool)
-	kill := int32(0)
-	for _, subhistory := range partitions {
-		l := makeLinkedEntries(convertEntries(renumber(subhistory)))
-		go func() {
-			results <- checkSingle(model, l, &kill)
-		}()
+	l := make([]*node, len(partitions))
+	for i, subhistory := range partitions {
+		l[i] = makeLinkedEntries(convertEntries(renumber(subhistory)))
 	}
-	var timeoutChan <-chan time.Time
-	if timeout > 0 {
-		timeoutChan = time.After(timeout)
-	}
-	count := 0
-loop:
-	for {
-		select {
-		case result := <-results:
-			ok = ok && result
-			if !ok {
-				atomic.StoreInt32(&kill, 1)
-				break loop
-			}
-			count++
-			if count >= len(partitions) {
-				break loop
-			}
-		case <-timeoutChan:
-			break loop // if we time out, we might get a false positive
-		}
-	}
-	return ok
+	return checkParallel(model, l, timeout)
 }
