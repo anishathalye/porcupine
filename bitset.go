@@ -1,5 +1,7 @@
 package porcupine
 
+import "math/bits"
+
 type bitset []uint64
 
 // data layout:
@@ -42,15 +44,11 @@ func (b bitset) get(pos uint) bool {
 }
 
 func (b bitset) popcnt() uint {
-	total := uint(0)
+	total := 0
 	for _, v := range b {
-		v = (v & 0x5555555555555555) + ((v & 0xAAAAAAAAAAAAAAAA) >> 1)
-		v = (v & 0x3333333333333333) + ((v & 0xCCCCCCCCCCCCCCCC) >> 2)
-		v = (v & 0x0F0F0F0F0F0F0F0F) + ((v & 0xF0F0F0F0F0F0F0F0) >> 4)
-		v *= 0x0101010101010101
-		total += uint((v >> 56) & 0xFF)
+		total += bits.OnesCount64(v)
 	}
-	return total
+	return uint(total)
 }
 
 func (b bitset) hash() uint64 {
