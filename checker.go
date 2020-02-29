@@ -268,7 +268,7 @@ func fillDefault(model Model) Model {
 
 func checkParallel(model Model, history [][]entry, computeInfo bool, timeout time.Duration) (bool, linearizationInfo) {
 	ok := true
-	results := make(chan bool)
+	results := make(chan bool, len(history))
 	longest := make([][]*[]int, len(history))
 	kill := int32(0)
 	for i, subhistory := range history {
