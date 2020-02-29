@@ -456,7 +456,7 @@ html {
                   }
                   const nextGid = allLinearizations[index][i]
                   let nextPos
-                  if (prev == null) {
+                  if (prev === null) {
                     nextPos = xPos[byGid[nextGid]['Start']]
                   } else {
                     nextPos = Math.max(xPos[byGid[nextGid]['Start']], prev + EPSILON)
@@ -571,6 +571,9 @@ html {
         })
 
         // draw partial linearizations
+        const illegalLast = data.map(partition => {
+          return partition['PartialLinearizations'].map(_ => new Set())
+        })
         const largestIllegal = data.map(() => {return {}})
         const largestIllegalLength = data.map(() => {return {}})
         const partialLayers = []
@@ -643,6 +646,7 @@ html {
                   'y2': y + BOX_HEIGHT + 2*LINE_BLEED,
                   'class': 'linearization-invalid linearization-point',
                 })
+                illegalLast[partitionIndex][linIndex].add(index)
                 if (!Object.prototype.hasOwnProperty.call(largestIllegalLength[partitionIndex], index) || largestIllegalLength[partitionIndex][index] < lin.length) {
                   largestIllegalLength[partitionIndex][index] = lin.length
                   largestIllegal[partitionIndex][index] = linIndex
@@ -661,8 +665,8 @@ html {
 
         function handleMouseOver() {
           if (!selected) {
-            const partition = this.dataset['partition']
-            const index = this.dataset['index']
+            const partition = parseInt(this.dataset['partition'])
+            const index = parseInt(this.dataset['index'])
             highlight(partition, index)
           }
           tooltip.style.opacity = 1
@@ -681,7 +685,7 @@ html {
         function highlight(partition, index) {
           // hide all but this partition
           historyLayers.forEach((layer, i) => {
-            if (i == partition) {
+            if (i === partition) {
               layer.classList.remove('hidden')
             } else {
               layer.classList.add('hidden')
@@ -702,8 +706,8 @@ html {
 
         let lastTooltip = [null, null, null, null, null]
         function handleMouseMove() {
-          const partition = this.dataset['partition']
-          const index = this.dataset['index']
+          const partition = parseInt(this.dataset['partition'])
+          const index = parseInt(this.dataset['index'])
           const [sPartition, sIndex] = selectedIndex
           const thisTooltip = [partition, index, selected, sPartition, sIndex]
 
@@ -721,7 +725,7 @@ html {
               if (!selected) {
                 tooltip.innerHTML = 'Not part of any partial linearization.'
               } else {
-                tooltip.innerHTML = 'Not part of this partial linearization.'
+                tooltip.innerHTML = 'Selected element is not part of any partial linearization.'
               }
             } else {
               const lin = data[partition]['PartialLinearizations'][maxIndex]
@@ -730,25 +734,32 @@ html {
               for (let i = 0; i < lin.length; i++) {
                 prev = curr
                 curr = lin[i]
-                if (curr['Index'] == index) {
+                if (curr['Index'] === index) {
                   found = true
                   break
                 }
               }
+              let call = data[partition]['History'][index]['Start']
+              let ret = data[partition]['History'][index]['OriginalEnd']
               let msg = ''
-              if (prev) {
-                msg += '<strong>Previous state:</strong><br>' + prev['StateDescription']
-              }
               if (found) {
-                if (prev) {
-                  msg += '<br><br>'
+                // part of linearization
+                if (prev !== null) {
+                  msg = '<strong>Previous state:</strong><br>' + prev['StateDescription'] + '<br><br>'
                 }
-                msg += '<strong>New state:</strong><br>' + curr['StateDescription']
+                msg += '<strong>New state:</strong><br>' + curr['StateDescription'] +
+                  '<br><br>Call: ' + call +
+                  '<br><br>Return: ' + ret
+              } else if (illegalLast[partition][maxIndex].has(index)) {
+                // illegal next one
+                msg = '<strong>Previous state:</strong><br>' + lin[lin.length-1]['StateDescription'] +
+                  '<br><br><strong>New state:</strong><br>&langle;invalid op&rangle;' +
+                  '<br><br>Call: ' + call +
+                  '<br><br>Return: ' + ret
               } else {
-                msg += '<br><br><strong>New state:</strong><br>' + '&langle;invalid op&rangle;'
+                // not part of this one
+                msg = 'Not part of selected element\'s partial linearization.'
               }
-              msg += '<br><br>Call: ' + data[partition]['History'][index]['Start']
-              msg += '<br><br>Return: ' + data[partition]['History'][index]['OriginalEnd']
               tooltip.innerHTML = msg
             }
             lastTooltip = thisTooltip
@@ -773,7 +784,7 @@ html {
           // show longest linearizations, which are first
           partialLayers.forEach(layers => {
             layers.forEach((l, i) => {
-              if (i == 0) {
+              if (i === 0) {
                 l.classList.remove('hidden')
               } else {
                 l.classList.add('hidden')
@@ -783,11 +794,11 @@ html {
         }
 
         function handleClick() {
-          const partition = this.dataset['partition']
-          const index = this.dataset['index']
+          const partition = parseInt(this.dataset['partition'])
+          const index = parseInt(this.dataset['index'])
           if (selected) {
             const [sPartition, sIndex] = selectedIndex
-            if (partition == sPartition && index == sIndex) {
+            if (partition === sPartition && index === sIndex) {
               deselect()
               return
             } else {
