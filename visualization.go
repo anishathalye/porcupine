@@ -753,8 +753,8 @@ html {
             }
             lastTooltip = thisTooltip
           }
-          tooltip.style.left = (event.clientX+50) + 'px'
-          tooltip.style.top = (event.clientY) + 'px'
+          tooltip.style.left = (event.pageX+20) + 'px'
+          tooltip.style.top = (event.pageY+20) + 'px'
         }
 
         function handleMouseOut() {
