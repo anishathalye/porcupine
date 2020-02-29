@@ -297,6 +297,7 @@ loop:
 				break loop
 			}
 		case <-timeoutChan:
+			atomic.StoreInt32(&kill, 1)
 			break loop // if we time out, we might get a false positive
 		}
 	}
