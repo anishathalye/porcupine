@@ -572,7 +572,7 @@ html {
 
         // draw partial linearizations
         const illegalLast = data.map(partition => {
-          return partition['PartialLinearizations'].map(_ => new Set())
+          return partition['PartialLinearizations'].map(() => new Set())
         })
         const largestIllegal = data.map(() => {return {}})
         const largestIllegalLength = data.map(() => {return {}})
