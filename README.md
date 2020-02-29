@@ -3,7 +3,13 @@
 Porcupine is a fast linearizability checker for testing the correctness of
 distributed systems. It takes a sequential specification as executable Go code,
 along with a concurrent history, and it determines whether the history is
-linearizable with respect to the sequential specification.
+linearizable with respect to the sequential specification. Porcupine also
+implements a visualizer for histories and linearization points.
+
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/top-demo.png" width="500" alt="Linearizability visualization demo">
+</p>
 
 Porcupine implements the algorithm described in [Faster linearizability
 checking via P-compositionality][faster-linearizability-checking], an
@@ -22,14 +28,17 @@ Porcupine takes an executable model of a system along with a history, and it
 runs a decision procedure to determine if the history is linearizable with
 respect to the model. Porcupine supports specifying history in two ways, either
 as a list of operations with given call and return times, or as a list of
-call/return events in time order.
+call/return events in time order. Porcupine can also visualize histories, along
+with partial linearizations, which may aid in debugging.
 
 See [`model.go`](model.go) for documentation on how to write a model or specify
 histories. Once you've written a model and have a history, you can use the
-`CheckOperations` and `CheckEvents` functions to determine if your history is
-linearizable.
+`CheckOperations` and `CheckEvents` functions (defined in
+[`porcupine.go`](porcupine.go)) to determine if your history is linearizable.
+If you want to visualize a history, along with partial linearizations, you can
+use the `Visualize` function (see [`visualization.go`](visualization.go)).
 
-## Example
+### Testing linearizability
 
 Suppose we're testing linearizability for operations on a read/write register
 that's initialized to `0`. We write a sequential specification for the register
@@ -75,17 +84,17 @@ We encode this history as follows:
 ```go
 events := []porcupine.Event{
     // C0: Write(100)
-    {Kind: porcupine.CallEvent, Value: registerInput{false, 100}, Id: 0},
+    {Kind: porcupine.CallEvent, Value: registerInput{false, 100}, Id: 0, ClientId: 0},
     // C1: Read()
-    {Kind: porcupine.CallEvent, Value: registerInput{true, 0}, Id: 1},
+    {Kind: porcupine.CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1},
     // C2: Read()
-    {Kind: porcupine.CallEvent, Value: registerInput{true, 0}, Id: 2},
+    {Kind: porcupine.CallEvent, Value: registerInput{true, 0}, Id: 2, ClientId: 2},
     // C2: Completed Read -> 0
-    {Kind: porcupine.ReturnEvent, Value: 0, Id: 2},
+    {Kind: porcupine.ReturnEvent, Value: 0, Id: 2, ClientId: 2},
     // C1: Completed Read -> 100
-    {Kind: porcupine.ReturnEvent, Value: 100, Id: 1},
+    {Kind: porcupine.ReturnEvent, Value: 100, Id: 1, ClientId: 1},
     // C0: Completed Write
-    {Kind: porcupine.ReturnEvent, Value: 0, Id: 0},
+    {Kind: porcupine.ReturnEvent, Value: 0, Id: 0, ClientId: 0},
 }
 ```
 
@@ -95,6 +104,12 @@ We can have Porcupine check the linearizability of the history as follows:
 ok := porcupine.CheckEvents(registerModel, events)
 // returns true
 ```
+
+Porcupine can visualize the linearization points as well:
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/ex-1.png" width="500" alt="Example 1">
+</p>
 
 Now, suppose we have another history:
 
@@ -107,12 +122,84 @@ C2:                        |- Read(): 0 -|
 We can check the history with Porcupine and see that it's not linearizable:
 
 ```go
+events := []porcupine.Event{
+    // C0: Write(200)
+    {Kind: porcupine.CallEvent, Value: registerInput{false, 200}, Id: 0, ClientId: 0},
+    // C1: Read()
+    {Kind: porcupine.CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1},
+    // C1: Completed Read -> 200
+    {Kind: porcupine.ReturnEvent, Value: 200, Id: 1, ClientId: 1},
+    // C2: Read()
+    {Kind: porcupine.CallEvent, Value: registerInput{true, 0}, Id: 2, ClientId: 2},
+    // C2: Completed Read -> 0
+    {Kind: porcupine.ReturnEvent, Value: 0, Id: 2, ClientId: 2},
+    // C0: Completed Write
+    {Kind: porcupine.ReturnEvent, Value: 0, Id: 0, ClientId: 0},
+}
+
 ok := porcupine.CheckEvents(registerModel, events)
 // returns false
 ```
 
+<p align="center">
+<img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/ex-2.png" width="500" alt="Example 2">
+</p>
+
 See [`porcupine_test.go`](porcupine_test.go) for more examples on how to write
 models and histories.
+
+### Visualizing histories
+
+Porcupine provides functionality to visualize histories, along with the
+linearization (or partial linearizations and illegal linearization points, in
+the case of a non-linearizable history). The result is an HTML page that draws
+an interactive visualization using JavaScript. The output looks like this:
+
+<p align="center">
+<a href="https://www.anishathalye.com/porcupine/demo.html">
+<img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/demo.png" width="735" alt="Visualization demo">
+</a>
+</p>
+
+You can see the full interactive version
+[here](https://www.anishathalye.com/porcupine/demo.html).
+
+The visualization is by partition: all partitions are essentially independent,
+so with the key-value store example above, operations related to each unique
+key are in a separate partition.
+
+Statically, the visualization shows all history elements, along with
+linearization points for each partition. If a partition has no full
+linearization, the visualization shows the longest partial linearization. It
+also shows, for each history element, the longest partial linearization
+containing that event, even if it's not the longest overall partial
+linearization; these are greyed out by default. It also shows illegal
+linearization points, history elements that were checked to see if they could
+occur next but which were illegal to linearize at that point according to the
+model.
+
+When a history element is hovered over, the visualization highlights the most
+relevant partial linearization. When it exists, the longest partial
+linearization containing the event is shown. Otherwise, when it exists, the
+visualization shows the longest partial linearization that ends with an illegal
+LP that is the event being hovered over. Hovering over an event also shows a
+tooltip showing extra information, such as the previous and current states of
+the state machine, as well as the time the operation was invoked and when it
+returned. This information is derived from the currently selected linearization.
+
+Clicking on a history element selects it, which highlights the event with a
+bold border. This has the effect of making the selection of a partial
+linearization "sticky", so it's possible to move around the history without
+de-selecting it. Clicking on another history element will select that one
+instead, and clicking on the background will deselect.
+
+All that's needed to visualize histories is the `CheckOperationsVerbose` /
+`CheckEventsVerbose` functions, which return extra information that's used by
+the visualization, and the `Visualize` function, which produces the
+visualization. For the visualization to be good, it's useful to fill out the
+`DescribeOperation` and `DescribeState` fields of the model. See
+[`visualization_test.go`](visualization_test.go) for an end-to-end example of
+how to visualize a history using Porcupine.
 
 ## Notes
 
@@ -139,7 +226,7 @@ If you use Porcupine in any way in academic work, please cite the following:
 
 ## License
 
-Copyright (c) 2017-2019 Anish Athalye. Released under the MIT License. See
+Copyright (c) 2017-2020 Anish Athalye. Released under the MIT License. See
 [LICENSE.md][license] for details.
 
 [faster-linearizability-checking]: https://arxiv.org/pdf/1504.00204.pdf
