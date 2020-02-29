@@ -288,12 +288,12 @@ loop:
 	for {
 		select {
 		case result := <-results:
+			count++
 			ok = ok && result
 			if !ok && !computeInfo {
 				atomic.StoreInt32(&kill, 1)
 				break loop
 			}
-			count++
 			if count >= len(history) {
 				break loop
 			}
@@ -305,6 +305,12 @@ loop:
 	}
 	var info linearizationInfo
 	if computeInfo {
+		// make sure we've waited for all goroutines to finish,
+		// otherwise we might race on access to longest[]
+		for count < len(history) {
+			<-results
+			count++
+		}
 		// return longest linearizable prefixes that include each history element
 		partialLinearizations := make([][][]int, len(history))
 		for i := 0; i < len(history); i++ {
