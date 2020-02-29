@@ -67,3 +67,11 @@ func DefaultDescribeOperation(input interface{}, output interface{}) string {
 func DefaultDescribeState(state interface{}) string {
 	return fmt.Sprintf("%v", state)
 }
+
+type CheckResult string
+
+const (
+	Unknown CheckResult = "Unknown" // timed out
+	Ok                  = "Ok"
+	Illegal             = "Illegal"
+)

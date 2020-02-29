@@ -266,8 +266,9 @@ func fillDefault(model Model) Model {
 	return model
 }
 
-func checkParallel(model Model, history [][]entry, computeInfo bool, timeout time.Duration) (bool, linearizationInfo) {
+func checkParallel(model Model, history [][]entry, computeInfo bool, timeout time.Duration) (CheckResult, linearizationInfo) {
 	ok := true
+	timedOut := false
 	results := make(chan bool, len(history))
 	longest := make([][]*[]int, len(history))
 	kill := int32(0)
@@ -297,6 +298,7 @@ loop:
 				break loop
 			}
 		case <-timeoutChan:
+			timedOut = true
 			atomic.StoreInt32(&kill, 1)
 			break loop // if we time out, we might get a false positive
 		}
@@ -326,10 +328,20 @@ loop:
 		info.history = history
 		info.partialLinearizations = partialLinearizations
 	}
-	return ok, info
+	var result CheckResult
+	if !ok {
+		result = Illegal
+	} else {
+		if timedOut {
+			result = Unknown
+		} else {
+			result = Ok
+		}
+	}
+	return result, info
 }
 
-func checkEvents(model Model, history []Event, verbose bool, timeout time.Duration) (bool, linearizationInfo) {
+func checkEvents(model Model, history []Event, verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
 	model = fillDefault(model)
 	partitions := model.PartitionEvent(history)
 	l := make([][]entry, len(partitions))
@@ -339,7 +351,7 @@ func checkEvents(model Model, history []Event, verbose bool, timeout time.Durati
 	return checkParallel(model, l, verbose, timeout)
 }
 
-func checkOperations(model Model, history []Operation, verbose bool, timeout time.Duration) (bool, linearizationInfo) {
+func checkOperations(model Model, history []Operation, verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
 	model = fillDefault(model)
 	partitions := model.Partition(history)
 	l := make([][]entry, len(partitions))
