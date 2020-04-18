@@ -19,7 +19,7 @@ func visualizeTempFile(t *testing.T, model Model, info linearizationInfo) {
 	t.Logf("wrote visualization to %s", file.Name())
 }
 
-func TestMultipleLengths(t *testing.T) {
+func TestVisualizationMultipleLengths(t *testing.T) {
 	ops := []Operation{
 		{0, kvInput{op: 0, key: "x"}, 0, kvOutput{"w"}, 100},
 		{1, kvInput{op: 1, key: "x", value: "y"}, 5, kvOutput{}, 10},
@@ -150,4 +150,14 @@ func TestRegisterModelReadme(t *testing.T) {
 	}
 
 	visualizeTempFile(t, registerModel, info)
+}
+
+func TestVisualizationLarge(t *testing.T) {
+	events := parseJepsenLog("test_data/jepsen/etcd_070.log")
+	res, info := CheckEventsVerbose(etcdModel, events, 0)
+	if res != Illegal {
+		t.Fatal("expected operations not to be linearizable")
+	}
+
+	visualizeTempFile(t, etcdModel, info)
 }

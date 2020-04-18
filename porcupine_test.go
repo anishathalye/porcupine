@@ -124,6 +124,35 @@ var etcdModel = Model{
 			return ok, result
 		}
 	},
+	DescribeOperation: func(input, output interface{}) string {
+		inp := input.(etcdInput)
+		out := output.(etcdOutput)
+		switch inp.op {
+		case 0:
+			var read string
+			if out.exists {
+				read = fmt.Sprintf("%d", out.value)
+			} else {
+				read = "null"
+			}
+			return fmt.Sprintf("read() -> %s", read)
+		case 1:
+			return fmt.Sprintf("write(%d)", inp.arg1)
+		case 2:
+			var ret string
+			if out.unknown {
+				ret = "unknown"
+			} else if out.ok {
+				ret = "ok"
+			} else {
+				ret = "fail"
+			}
+			return fmt.Sprintf("cas(%d, %d) -> %s", inp.arg1, inp.arg2, ret)
+
+		default:
+			return "<invalid>"
+		}
+	},
 }
 
 func parseJepsenLog(filename string) []Event {
