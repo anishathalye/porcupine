@@ -9,7 +9,17 @@ html {
 }
 
 #legend {
-  margin-bottom: 10px;
+  position: fixed;
+  left: 10px;
+  top: 10px;
+  background-color: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(3px);
+  padding: 5px 2px 1px 2px;
+  border-radius: 4px;
+}
+
+#canvas {
+  margin-top: 45px;
 }
 
 #calc {
@@ -33,6 +43,11 @@ html {
   fill: #42d1f5;
   rx: 4;
   ry: 4;
+}
+
+.link {
+  fill: #206475;
+  cursor: pointer;
 }
 
 .selected {
@@ -81,11 +96,15 @@ html {
   padding: 5px;
   font-size: 0.8rem;
 }
+
+.inactive {
+  display: none;
+}
     </style>
   </head>
   <body>
     <div id="legend">
-      <svg width="500" height="20">
+      <svg xmlns="http://www.w3.org/2000/svg" width="660" height="20">
         <text x="0" y="10" alignment-baseline="middle">Clients</text>
         <line x1="50" y1="0" x2="70" y2="20" stroke="#000" stroke-width="1"></line>
         <text x="70" y="10" alignment-baseline="middle">Time</text>
@@ -95,6 +114,7 @@ html {
         <text x="315" y="10" alignment-baseline="middle">Valid LP</text>
         <rect x="400" y="5" width="10" height="10" fill="rgba(255, 0, 0, 0.5)"></rect>
         <text x="415" y="10" alignment-baseline="middle">Invalid LP</text>
+        <text x="520" y="10" alignment-baseline="middle" id="jump-link" class="link">[ jump to first error ]</text>
       </svg>
     </div>
     <div id="canvas">
@@ -468,11 +488,12 @@ html {
 
         // draw partial linearizations
         const illegalLast = data.map(partition => {
-          return partition['PartialLinearizations'].map(_ => new Set())
+          return partition['PartialLinearizations'].map(() => new Set())
         })
         const largestIllegal = data.map(() => {return {}})
         const largestIllegalLength = data.map(() => {return {}})
         const partialLayers = []
+        const errorPoints = []
         data.forEach((partition, partitionIndex) => {
           const l = []
           partialLayers.push(l)
@@ -535,12 +556,18 @@ html {
                   'class': 'linearization-invalid linearization-line',
                 })
                 // current line
-                svgadd(g, 'line', {
+                const point = svgadd(g, 'line', {
                   'x1': x,
                   'x2': x,
                   'y1': y,
                   'y2': y + BOX_HEIGHT + 2*LINE_BLEED,
                   'class': 'linearization-invalid linearization-point',
+                })
+                errorPoints.push({
+                  x: x,
+                  partition: partitionIndex,
+                  index: lin[lin.length-1]['Index'], // NOTE not index
+                  element: point
                 })
                 illegalLast[partitionIndex][linIndex].add(index)
                 if (!Object.prototype.hasOwnProperty.call(largestIllegalLength[partitionIndex], index) || largestIllegalLength[partitionIndex][index] < lin.length) {
@@ -551,6 +578,7 @@ html {
             })
           })
         })
+        errorPoints.sort((a, b) => a.x - b.x)
 
         // attach targetRects
         svgattach(svg, targetRects)
@@ -598,6 +626,7 @@ html {
           if (maxIndex !== null) {
             partialLayers[partition][maxIndex].classList.remove('hidden')
           }
+          updateJump()
         }
 
         let lastTooltip = [null, null, null, null, null]
@@ -687,6 +716,25 @@ html {
               }
             })
           })
+          updateJump()
+        }
+
+        function updateJump() {
+          const jump = document.getElementById('jump-link')
+          // find first non-hidden point
+          // feels a little hacky, but it works
+          const point = errorPoints.find(pt => !pt.element.parentElement.classList.contains('hidden'))
+          if (point) {
+            jump.classList.remove('inactive')
+            jump.onclick = () => {
+              point.element.scrollIntoView({behavior: 'smooth', inline: 'center', block: 'center'})
+              if (!selected) {
+                select(point.partition, point.index)
+              }
+            }
+          } else {
+            jump.classList.add('inactive')
+          }
         }
 
         function handleClick() {
@@ -701,14 +749,18 @@ html {
               historyRects[sPartition][sIndex].classList.remove('selected')
             }
           }
-          selected = true
-          selectedIndex = [partition, index]
-          highlight(partition, index)
-          historyRects[partition][index].classList.add('selected')
+          select(partition, index)
         }
 
         function handleBgClick() {
           deselect()
+        }
+
+        function select(partition, index) {
+          selected = true
+          selectedIndex = [partition, index]
+          highlight(partition, index)
+          historyRects[partition][index].classList.add('selected')
         }
 
         function deselect() {
