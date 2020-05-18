@@ -203,7 +203,9 @@ how to visualize a history using Porcupine.
 
 ## Notes
 
-Porcupine's API is not stable yet. Please vendor this package before using it.
+Porcupine's API is not stable yet. Please vendor this package before using it,
+or if you are using Go modules, make sure you have selected a specific tag or
+commit.
 
 If Porcupine runs really slowly on your model/history, it may be inevitable,
 due to state space explosion. See [this
