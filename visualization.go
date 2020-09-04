@@ -89,8 +89,14 @@ func computeVisualizationData(model Model, info linearizationInfo) visualization
 func Visualize(model Model, info linearizationInfo, output io.Writer) error {
 	data := computeVisualizationData(model, info)
 	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
 	_, err = fmt.Fprintf(output, html, jsonData)
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func VisualizePath(model Model, info linearizationInfo, path string) error {
@@ -449,7 +455,7 @@ html {
           let pos = xPos[sortedTimestamps[i-1]] + BOX_GAP
           // ensure that text fits in boxes
           while (eventIndex < byEnd.length && byEnd[eventIndex].end <= ts) {
-            // push our position as far as necessary to accomodate text in box
+            // push our position as far as necessary to accommodate text in box
             const event = byEnd[eventIndex]
             const textEndPos = xPos[event.start] + event.width
             pos = Math.max(pos, textEndPos)
