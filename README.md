@@ -1,4 +1,4 @@
-# Porcupine [![Build Status](https://travis-ci.com/anishathalye/porcupine.svg?branch=master)](https://travis-ci.com/anishathalye/porcupine)
+# Porcupine [![Build Status](https://github.com/anishathalye/porcupine/workflows/CI/badge.svg)](https://github.com/anishathalye/porcupine/actions?query=workflow%3ACI)
 
 Porcupine is a fast linearizability checker for testing the correctness of
 distributed systems. It takes a sequential specification as executable Go code,
