@@ -25,7 +25,7 @@ type Event struct {
 }
 
 type Model struct {
-	// Partition functions, such that a history is linearizable if an only
+	// Partition functions, such that a history is linearizable if and only
 	// if each partition is linearizable. If you don't want to implement
 	// this, you can always use the `NoPartition` functions implemented
 	// below.
