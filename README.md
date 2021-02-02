@@ -8,7 +8,11 @@ implements a visualizer for histories and linearization points.
 
 
 <p align="center">
+<a href="https://www.anishathalye.com/porcupine/ex-2.html">
 <img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/top-demo.png" width="500" alt="Linearizability visualization demo">
+</a>
+<br>
+(click for interactive version)
 </p>
 
 Porcupine implements the algorithm described in [Faster linearizability
@@ -108,7 +112,9 @@ ok := porcupine.CheckEvents(registerModel, events)
 Porcupine can visualize the linearization points as well:
 
 <p align="center">
+<a href="https://www.anishathalye.com/porcupine/ex-1.html">
 <img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/ex-1.png" width="500" alt="Example 1">
+</a>
 </p>
 
 Now, suppose we have another history:
@@ -142,7 +148,9 @@ ok := porcupine.CheckEvents(registerModel, events)
 ```
 
 <p align="center">
+<a href="https://www.anishathalye.com/porcupine/ex-2.html">
 <img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/ex-2.png" width="500" alt="Example 2">
+</a>
 </p>
 
 See [`porcupine_test.go`](porcupine_test.go) for more examples on how to write
