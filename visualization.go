@@ -118,6 +118,10 @@ html {
   font-size: 16px;
 }
 
+text {
+  dominant-baseline: middle;
+}
+
 #legend {
   position: fixed;
   left: 10px;
@@ -151,8 +155,6 @@ html {
   stroke: #888;
   stroke-width: 1;
   fill: #42d1f5;
-  rx: 4;
-  ry: 4;
 }
 
 .link {
@@ -215,16 +217,16 @@ html {
   <body>
     <div id="legend">
       <svg xmlns="http://www.w3.org/2000/svg" width="660" height="20">
-        <text x="0" y="10" alignment-baseline="middle">Clients</text>
+        <text x="0" y="10">Clients</text>
         <line x1="50" y1="0" x2="70" y2="20" stroke="#000" stroke-width="1"></line>
-        <text x="70" y="10" alignment-baseline="middle">Time</text>
+        <text x="70" y="10">Time</text>
         <line x1="110" y1="10" x2="200" y2="10" stroke="#000" stroke-width="2"></line>
         <polygon points="200,5 200,15, 210,10" fill="#000"></polygon>
         <rect x="300" y="5" width="10" height="10" fill="rgba(0, 0, 0, 0.5)"></rect>
-        <text x="315" y="10" alignment-baseline="middle">Valid LP</text>
+        <text x="315" y="10">Valid LP</text>
         <rect x="400" y="5" width="10" height="10" fill="rgba(255, 0, 0, 0.5)"></rect>
-        <text x="415" y="10" alignment-baseline="middle">Invalid LP</text>
-        <text x="520" y="10" alignment-baseline="middle" id="jump-link" class="link">[ jump to first error ]</text>
+        <text x="415" y="10">Invalid LP</text>
+        <text x="520" y="10" id="jump-link" class="link">[ jump to first error ]</text>
       </svg>
     </div>
     <div id="canvas">
@@ -295,6 +297,7 @@ html {
         const LINE_BLEED = 5
         const BOX_GAP = 20
         const BOX_TEXT_PADDING = 10
+        const HISTORY_RECT_RADIUS = 4
 
         let maxClient = -1
         data.forEach(partition => {
@@ -397,7 +400,6 @@ html {
             const svg = svgadd(scratch, 'svg')
             const text = svgadd(svg, 'text', {
               'text-anchor': 'middle',
-              'alignment-baseline': 'middle',
               'class': 'history-text',
             })
             text.textContent = el['Description']
@@ -534,7 +536,6 @@ html {
             'x': XOFF/2,
             'y': PADDING + BOX_HEIGHT/2 + i * (BOX_HEIGHT + BOX_SPACE),
             'text-anchor': 'middle',
-            'alignment-baseline': 'middle',
           })
           text.textContent = i
         }
@@ -565,13 +566,14 @@ html {
               'width': width,
               'x': x,
               'y': y,
+              'rx': HISTORY_RECT_RADIUS,
+              'ry': HISTORY_RECT_RADIUS,
               'class': 'history-rect'
             }))
             const text = svgadd(g, 'text', {
               'x': x + width/2,
               'y': y + BOX_HEIGHT/2,
               'text-anchor': 'middle',
-              'alignment-baseline': 'middle',
               'class': 'history-text',
             })
             text.textContent = el['Description']
