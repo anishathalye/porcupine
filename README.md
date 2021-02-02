@@ -50,7 +50,7 @@ like this:
 
 ```go
 type registerInput struct {
-    op bool // false = write, true = read
+    op bool // false = put true = get
     value int
 }
 
@@ -64,7 +64,7 @@ registerModel := porcupine.Model{
     Step: func(state, input, output interface{}) (bool, interface{}) {
         regInput := input.(registerInput)
         if regInput.op == false {
-            return true, regInput.value // always ok to execute a write
+            return true, regInput.value // always ok to execute a put
         } else {
             readCorrectValue := output == state
             return readCorrectValue, state // state is unchanged
@@ -78,26 +78,26 @@ row, the first `|` is when the operation was invoked, and the second `|` is
 when the operation returned.
 
 ```
-C0:  |-------- Write(100) --------|
-C1:      |--- Read(): 100 ---|
-C2:          |- Read(): 0 -|
+C0:  |-------- put('100') --------|
+C1:     |--- get() -> '100' ---|
+C2:        |- get() -> '0' -|
 ```
 
 We encode this history as follows:
 
 ```go
 events := []porcupine.Event{
-    // C0: Write(100)
+    // C0: put('100')
     {Kind: porcupine.CallEvent, Value: registerInput{false, 100}, Id: 0, ClientId: 0},
-    // C1: Read()
+    // C1: get()
     {Kind: porcupine.CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1},
-    // C2: Read()
+    // C2: get()
     {Kind: porcupine.CallEvent, Value: registerInput{true, 0}, Id: 2, ClientId: 2},
-    // C2: Completed Read -> 0
+    // C2: Completed get() -> '0'
     {Kind: porcupine.ReturnEvent, Value: 0, Id: 2, ClientId: 2},
-    // C1: Completed Read -> 100
+    // C1: Completed get() -> '100'
     {Kind: porcupine.ReturnEvent, Value: 100, Id: 1, ClientId: 1},
-    // C0: Completed Write
+    // C0: Completed put('100')
     {Kind: porcupine.ReturnEvent, Value: 0, Id: 0, ClientId: 0},
 }
 ```
@@ -120,26 +120,26 @@ Porcupine can visualize the linearization points as well:
 Now, suppose we have another history:
 
 ```
-C0:  |------------- Write(200) -------------|
-C1:    |- Read(): 200 -|
-C2:                        |- Read(): 0 -|
+C0:  |---------------- put('200') ----------------|
+C1:    |- get() -> '200' -|
+C2:                           |- get() -> '0' -|
 ```
 
 We can check the history with Porcupine and see that it's not linearizable:
 
 ```go
 events := []porcupine.Event{
-    // C0: Write(200)
+    // C0: put('200')
     {Kind: porcupine.CallEvent, Value: registerInput{false, 200}, Id: 0, ClientId: 0},
-    // C1: Read()
+    // C1: get()
     {Kind: porcupine.CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1},
-    // C1: Completed Read -> 200
+    // C1: Completed get() -> '200'
     {Kind: porcupine.ReturnEvent, Value: 200, Id: 1, ClientId: 1},
-    // C2: Read()
+    // C2: get()
     {Kind: porcupine.CallEvent, Value: registerInput{true, 0}, Id: 2, ClientId: 2},
-    // C2: Completed Read -> 0
+    // C2: Completed get() -> '0'
     {Kind: porcupine.ReturnEvent, Value: 0, Id: 2, ClientId: 2},
-    // C0: Completed Write
+    // C0: Completed put('200')
     {Kind: porcupine.ReturnEvent, Value: 0, Id: 0, ClientId: 0},
 }
 
