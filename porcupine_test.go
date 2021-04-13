@@ -12,37 +12,47 @@ import (
 	"testing"
 )
 
-func TestRegisterModel(t *testing.T) {
-	// inputs
-	type registerInput struct {
-		op    bool // false = read, true = write
-		value int
-	}
-	// output
-	type registerOutput int // we don't care about return value for write
-	registerModel := Model{
-		Init: func() interface{} { return 0 },
-		Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
-			st := state.(int)
-			inp := input.(registerInput)
-			out := output.(int)
-			if inp.op == false {
-				// read
-				return out == st, state
-			} else {
-				// write
-				return true, inp.value
-			}
-		},
-	}
+type registerInput struct {
+	op    bool // false = put, true = get
+	value int
+}
 
+// a sequential specification of a register
+var registerModel = Model{
+	Init: func() interface{} {
+		return 0
+	},
+	// step function: takes a state, input, and output, and returns whether it
+	// was a legal operation, along with a new state
+	Step: func(state, input, output interface{}) (bool, interface{}) {
+		regInput := input.(registerInput)
+		if regInput.op == false {
+			return true, regInput.value // always ok to execute a put
+		} else {
+			readCorrectValue := output == state
+			return readCorrectValue, state // state is unchanged
+		}
+	},
+	DescribeOperation: func(input, output interface{}) string {
+		inp := input.(registerInput)
+		switch inp.op {
+		case true:
+			return fmt.Sprintf("get() -> '%d'", output.(int))
+		case false:
+			return fmt.Sprintf("put('%d')", inp.value)
+		}
+		return "<invalid>" // unreachable
+	},
+}
+
+func TestRegisterModel(t *testing.T) {
 	// examples taken from http://nil.csail.mit.edu/6.824/2017/quizzes/q2-17-ans.pdf
 	// section VII
 
 	ops := []Operation{
-		{0, registerInput{true, 100}, 0, 0, 100},
-		{1, registerInput{false, 0}, 25, 100, 75},
-		{2, registerInput{false, 0}, 30, 0, 60},
+		{0, registerInput{false, 100}, 0, 0, 100},
+		{1, registerInput{true, 0}, 25, 100, 75},
+		{2, registerInput{true, 0}, 30, 0, 60},
 	}
 	res := CheckOperations(registerModel, ops)
 	if res != true {
@@ -51,9 +61,9 @@ func TestRegisterModel(t *testing.T) {
 
 	// same example as above, but with Event
 	events := []Event{
-		{0, CallEvent, registerInput{true, 100}, 0},
-		{1, CallEvent, registerInput{false, 0}, 1},
-		{2, CallEvent, registerInput{false, 0}, 2},
+		{0, CallEvent, registerInput{false, 100}, 0},
+		{1, CallEvent, registerInput{true, 0}, 1},
+		{2, CallEvent, registerInput{true, 0}, 2},
 		{2, ReturnEvent, 0, 2},
 		{1, ReturnEvent, 100, 1},
 		{0, ReturnEvent, 0, 0},
@@ -64,9 +74,9 @@ func TestRegisterModel(t *testing.T) {
 	}
 
 	ops = []Operation{
-		{0, registerInput{true, 200}, 0, 0, 100},
-		{1, registerInput{false, 0}, 10, 200, 30},
-		{2, registerInput{false, 0}, 40, 0, 90},
+		{0, registerInput{false, 200}, 0, 0, 100},
+		{1, registerInput{true, 0}, 10, 200, 30},
+		{2, registerInput{true, 0}, 40, 0, 90},
 	}
 	res = CheckOperations(registerModel, ops)
 	if res != false {
@@ -75,10 +85,10 @@ func TestRegisterModel(t *testing.T) {
 
 	// same example as above, but with Event
 	events = []Event{
-		{0, CallEvent, registerInput{true, 200}, 0},
-		{1, CallEvent, registerInput{false, 0}, 1},
+		{0, CallEvent, registerInput{false, 200}, 0},
+		{1, CallEvent, registerInput{true, 0}, 1},
 		{1, ReturnEvent, 200, 1},
-		{2, CallEvent, registerInput{false, 0}, 2},
+		{2, CallEvent, registerInput{true, 0}, 2},
 		{2, ReturnEvent, 0, 2},
 		{0, ReturnEvent, 0, 0},
 	}

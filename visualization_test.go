@@ -1,7 +1,6 @@
 package porcupine
 
 import (
-	"fmt"
 	"io/ioutil"
 	"reflect"
 	"testing"
@@ -69,39 +68,6 @@ func TestVisualizationMultipleLengths(t *testing.T) {
 
 func TestRegisterModelReadme(t *testing.T) {
 	// basically the code from the README
-
-	type registerInput struct {
-		op    bool // false = write, true = read
-		value int
-	}
-
-	// a sequential specification of a register
-	registerModel := Model{
-		Init: func() interface{} {
-			return 0
-		},
-		// step function: takes a state, input, and output, and returns whether it
-		// was a legal operation, along with a new state
-		Step: func(state, input, output interface{}) (bool, interface{}) {
-			regInput := input.(registerInput)
-			if regInput.op == false {
-				return true, regInput.value // always ok to execute a write
-			} else {
-				readCorrectValue := output == state
-				return readCorrectValue, state // state is unchanged
-			}
-		},
-		DescribeOperation: func(input, output interface{}) string {
-			inp := input.(registerInput)
-			switch inp.op {
-			case true:
-				return fmt.Sprintf("get() -> '%d'", output.(int))
-			case false:
-				return fmt.Sprintf("put('%d')", inp.value)
-			}
-			return "<invalid>" // unreachable
-		},
-	}
 
 	events := []Event{
 		// C0: Write(100)

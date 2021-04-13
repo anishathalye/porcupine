@@ -50,7 +50,7 @@ like this:
 
 ```go
 type registerInput struct {
-    op bool // false = put true = get
+    op    bool // false = put, true = get
     value int
 }
 
