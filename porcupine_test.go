@@ -98,6 +98,32 @@ func TestRegisterModel(t *testing.T) {
 	}
 }
 
+func TestZeroDuration(t *testing.T) {
+	ops := []Operation{
+		{0, registerInput{false, 100}, 0, 0, 100},
+		{1, registerInput{true, 0}, 25, 100, 75},
+		{2, registerInput{true, 0}, 30, 0, 30},
+		{3, registerInput{true, 0}, 30, 0, 30},
+	}
+	res, info := CheckOperationsVerbose(registerModel, ops, 0)
+	if res != Ok {
+		t.Fatal("expected operations to be linearizable")
+	}
+
+	visualizeTempFile(t, registerModel, info)
+
+	ops = []Operation{
+		{0, registerInput{false, 200}, 0, 0, 100},
+		{1, registerInput{true, 0}, 10, 200, 10},
+		{2, registerInput{true, 0}, 10, 200, 10},
+		{3, registerInput{true, 0}, 40, 0, 90},
+	}
+	res, _ = CheckOperationsVerbose(registerModel, ops, 0)
+	if res != Illegal {
+		t.Fatal("expected operations to not be linearizable")
+	}
+}
+
 type etcdInput struct {
 	op   uint8 // 0 => read, 1 => write, 2 => cas
 	arg1 int   // used for write, or for CAS from argument
