@@ -11,11 +11,8 @@ jobs:
     strategy:
       matrix:
         go:
-          - ~1.11
-          - ~1.12
-          - ~1.13
-          - ~1.14
-          - ^1.15
+          - ~1.16
+          - ^1.20
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
@@ -23,14 +20,19 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: Test
         run: go test -v ./...
-  fmt:
-    name: Gofmt
+  format:
+    name: Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
       - name: Check gofmt
         run: test -z $(gofmt -l .)
+      - name: Check prettier
+        uses: creyD/prettier_action@v4.3
+        with:
+          dry: true
+          prettier_options: --check **/*.{html,css,js}
   cover:
     name: Coverage
     runs-on: ubuntu-latest
