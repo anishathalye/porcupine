@@ -229,8 +229,7 @@ If you use Porcupine in any way in academic work, please cite the following:
   author = {Anish Athalye},
   title = {Porcupine: A fast linearizability checker in {Go}},
   year = {2017},
-  howpublished = {\url{https://github.com/anishathalye/porcupine}},
-  note = {commit xxxxxxx}
+  howpublished = {\url{https://github.com/anishathalye/porcupine}}
 }
 ```
 
