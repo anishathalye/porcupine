@@ -8,7 +8,7 @@ implements a visualizer for histories and linearization points.
 
 
 <p align="center">
-<a href="https://www.anishathalye.com/porcupine/ex-2.html">
+<a href="https://anishathalye.github.io/porcupine/ex-2.html">
 <img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/top-demo.png" width="500" alt="Linearizability visualization demo">
 </a>
 <br>
@@ -112,7 +112,7 @@ ok := porcupine.CheckEvents(registerModel, events)
 Porcupine can visualize the linearization points as well:
 
 <p align="center">
-<a href="https://www.anishathalye.com/porcupine/ex-1.html">
+<a href="https://anishathalye.github.io/porcupine/ex-1.html">
 <img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/ex-1.png" width="500" alt="Example 1">
 </a>
 </p>
@@ -148,7 +148,7 @@ ok := porcupine.CheckEvents(registerModel, events)
 ```
 
 <p align="center">
-<a href="https://www.anishathalye.com/porcupine/ex-2.html">
+<a href="https://anishathalye.github.io/porcupine/ex-2.html">
 <img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/ex-2.png" width="500" alt="Example 2">
 </a>
 </p>
@@ -164,13 +164,13 @@ the case of a non-linearizable history). The result is an HTML page that draws
 an interactive visualization using JavaScript. The output looks like this:
 
 <p align="center">
-<a href="https://www.anishathalye.com/porcupine/demo.html">
+<a href="https://anishathalye.github.io/porcupine/demo.html">
 <img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/demo.png" width="735" alt="Visualization demo">
 </a>
 </p>
 
 You can see the full interactive version
-[here](https://www.anishathalye.com/porcupine/demo.html).
+[here](https://anishathalye.github.io/porcupine/demo.html).
 
 The visualization is by partition: all partitions are essentially independent,
 so with the key-value store example above, operations related to each unique
