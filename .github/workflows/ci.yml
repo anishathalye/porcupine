@@ -1,0 +1,56 @@
+name: CI
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 8 * * 6'
+jobs:
+  test:
+    name: "Test: Go ${{ matrix.go }}"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go:
+          - ~1.11
+          - ~1.12
+          - ~1.13
+          - ~1.14
+          - ^1.15
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Test
+        run: go test -v ./...
+  fmt:
+    name: Gofmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+      - name: Check gofmt
+        run: test -z $(gofmt -l .)
+  cover:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+      - name: Test with Coverage
+        run: go test -v  -coverprofile=coverage.txt -covermode=atomic ./...
+      - uses: codecov/codecov-action@v2
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ^1.16
+      - name: Install dependencies
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+      - name: Vet
+        run: go vet ./...
+      - name: Staticcheck
+        run: staticcheck -f stylish ./...

@@ -10,7 +10,7 @@ type entryKind bool
 
 const (
 	callEntry   entryKind = false
-	returnEntry           = true
+	returnEntry entryKind = true
 )
 
 type entry struct {

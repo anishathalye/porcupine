@@ -38,11 +38,6 @@ func (b bitset) clear(pos uint) bitset {
 	return b
 }
 
-func (b bitset) get(pos uint) bool {
-	major, minor := bitsetIndex(pos)
-	return b[major]&(1<<minor) != 0
-}
-
 func (b bitset) popcnt() uint {
 	total := 0
 	for _, v := range b {
