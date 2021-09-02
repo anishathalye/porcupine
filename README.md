@@ -9,7 +9,7 @@ implements a visualizer for histories and linearization points.
 
 <p align="center">
 <a href="https://anishathalye.github.io/porcupine/ex-2.html">
-<img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/top-demo.png" width="500" alt="Linearizability visualization demo">
+<img src="https://raw.githubusercontent.com/anishathalye/assets/master/porcupine/top-demo.png" width="500" alt="Linearizability visualization demo">
 </a>
 <br>
 (click for interactive version)
@@ -113,7 +113,7 @@ Porcupine can visualize the linearization points as well:
 
 <p align="center">
 <a href="https://anishathalye.github.io/porcupine/ex-1.html">
-<img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/ex-1.png" width="500" alt="Example 1">
+<img src="https://raw.githubusercontent.com/anishathalye/assets/master/porcupine/ex-1.png" width="500" alt="Example 1">
 </a>
 </p>
 
@@ -149,7 +149,7 @@ ok := porcupine.CheckEvents(registerModel, events)
 
 <p align="center">
 <a href="https://anishathalye.github.io/porcupine/ex-2.html">
-<img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/ex-2.png" width="500" alt="Example 2">
+<img src="https://raw.githubusercontent.com/anishathalye/assets/master/porcupine/ex-2.png" width="500" alt="Example 2">
 </a>
 </p>
 
@@ -165,7 +165,7 @@ an interactive visualization using JavaScript. The output looks like this:
 
 <p align="center">
 <a href="https://anishathalye.github.io/porcupine/demo.html">
-<img src="https://raw.githubusercontent.com/anishathalye/porcupine/assets/demo.png" width="735" alt="Visualization demo">
+<img src="https://raw.githubusercontent.com/anishathalye/assets/master/porcupine/demo.png" width="735" alt="Visualization demo">
 </a>
 </p>
 
