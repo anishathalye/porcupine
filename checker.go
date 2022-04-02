@@ -329,9 +329,7 @@ loop:
 			}
 			for k := range set {
 				arr := make([]int, len(*k))
-				for i, v := range *k {
-					arr[i] = v
-				}
+				copy(arr, *k)
 				partials = append(partials, arr)
 			}
 			partialLinearizations[i] = partials
