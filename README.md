@@ -1,4 +1,4 @@
-# Porcupine [![Build Status](https://github.com/anishathalye/porcupine/workflows/CI/badge.svg)](https://github.com/anishathalye/porcupine/actions?query=workflow%3ACI)
+# Porcupine [![Build Status](https://github.com/anishathalye/porcupine/workflows/CI/badge.svg)](https://github.com/anishathalye/porcupine/actions?query=workflow%3ACI) [![Go Reference](https://pkg.go.dev/badge/github.com/anishathalye/porcupine)](https://pkg.go.dev/github.com/anishathalye/porcupine)
 
 Porcupine is a fast linearizability checker for testing the correctness of
 distributed systems. It takes a sequential specification as executable Go code,
@@ -35,12 +35,23 @@ as a list of operations with given call and return times, or as a list of
 call/return events in time order. Porcupine can also visualize histories, along
 with partial linearizations, which may aid in debugging.
 
-See [`model.go`](model.go) for documentation on how to write a model or specify
-histories. Once you've written a model and have a history, you can use the
-`CheckOperations` and `CheckEvents` functions (defined in
-[`porcupine.go`](porcupine.go)) to determine if your history is linearizable.
-If you want to visualize a history, along with partial linearizations, you can
-use the `Visualize` function (see [`visualization.go`](visualization.go)).
+See the [documentation] for how to write a [model][porcupine-doc-model] and
+[specify histories][porcupine-doc-history]. You can also check out some
+[example implementations][porcupine-tests] of models from the tests.
+
+Once you've written a model and have a history, you can use the
+[`CheckOperations`][CheckOperations] and [`CheckEvents`][CheckEvents] functions
+to determine if your history is linearizable. If you want to visualize a
+history, along with partial linearizations, you can use the
+[`Visualize`][Visualize] function.
+
+[documentation]: https://pkg.go.dev/github.com/anishathalye/porcupine
+[porcupine-doc-model]: https://pkg.go.dev/github.com/anishathalye/porcupine#Model
+[porcupine-doc-history]: https://pkg.go.dev/github.com/anishathalye/porcupine#Operation
+[CheckOperations]: https://pkg.go.dev/github.com/anishathalye/porcupine#CheckOperations
+[CheckEvents]: https://pkg.go.dev/github.com/anishathalye/porcupine#CheckEvents
+[Visualize]: https://pkg.go.dev/github.com/anishathalye/porcupine#Visualize
+[porcupine-tests]: https://github.com/anishathalye/porcupine/blob/master/porcupine_test.go
 
 ### Testing linearizability
 
@@ -201,13 +212,17 @@ linearization "sticky", so it's possible to move around the history without
 de-selecting it. Clicking on another history element will select that one
 instead, and clicking on the background will deselect.
 
-All that's needed to visualize histories is the `CheckOperationsVerbose` /
-`CheckEventsVerbose` functions, which return extra information that's used by
-the visualization, and the `Visualize` function, which produces the
-visualization. For the visualization to be good, it's useful to fill out the
-`DescribeOperation` and `DescribeState` fields of the model. See
-[`visualization_test.go`](visualization_test.go) for an end-to-end example of
-how to visualize a history using Porcupine.
+All that's needed to visualize histories is the
+[`CheckOperationsVerbose`][CheckOperationsVerbose] /
+[`CheckEventsVerbose`][CheckEventsVerbose] functions, which return extra
+information that's used by the visualization, and the [`Visualize`][Visualize]
+function, which produces the visualization. For the visualization to be good,
+it's useful to fill out the `DescribeOperation` and `DescribeState` fields of
+the model. See [`visualization_test.go`](visualization_test.go) for an
+end-to-end example of how to visualize a history using Porcupine.
+
+[CheckOperationsVerbose]: https://pkg.go.dev/github.com/anishathalye/porcupine#CheckOperationsVerbose
+[CheckEventsVerbose]: https://pkg.go.dev/github.com/anishathalye/porcupine#CheckEventsVerbose
 
 ## Notes
 

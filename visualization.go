@@ -86,6 +86,18 @@ func computeVisualizationData(model Model, info linearizationInfo) visualization
 	return data
 }
 
+// Visualize produces a visualization of a history and (partial) linearization
+// as an HTML file that can be viewed in a web browser.
+//
+// If the history is linearizable, the visualization shows the linearization of
+// the history. If the history is not linearizable, the visualization shows
+// partial linearizations and illegal linearization points.
+//
+// To get the linearizationInfo that this function requires, you can use
+// [CheckOperationsVerbose] / [CheckEventsVerbose].
+//
+// This function writes the visualization, an HTML file with embedded
+// JavaScript and data, to the given output.
 func Visualize(model Model, info linearizationInfo, output io.Writer) error {
 	data := computeVisualizationData(model, info)
 	jsonData, err := json.Marshal(data)
@@ -99,6 +111,8 @@ func Visualize(model Model, info linearizationInfo, output io.Writer) error {
 	return nil
 }
 
+// VisualizePath is a wrapper around [Visualize] to write the visualization to
+// a file path.
 func VisualizePath(model Model, info linearizationInfo, path string) error {
 	f, err := os.Create(path)
 	if err != nil {
