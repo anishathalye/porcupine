@@ -193,7 +193,7 @@ func checkSingle[S State[S]](model Model[S], history []entry, computePartial boo
 		}
 		if entry.match != nil {
 			matching := entry.match // the return entry
-			ok, newState := model.Step(state, entry.value, matching.value)
+			ok, newState := model.Step(state.Clone(), entry.value, matching.value)
 			if ok {
 				newLinearized := linearized.clone().set(uint(entry.id))
 				newCacheEntry := cacheEntry[S]{newLinearized, newState}

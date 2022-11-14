@@ -29,7 +29,7 @@ func (i intState) String() string {
 type intSliceState []int
 
 func (i intSliceState) Clone() intSliceState {
-	ix := make([]int, len(i))
+	ix := make([]int, 0, len(i))
 	for _, i := range i {
 		ix = append(ix, i)
 	}

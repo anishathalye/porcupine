@@ -56,17 +56,13 @@ type Event struct {
 
 // A Model is a sequential specification of a system.
 //
-// Note: models in this package are expected to be purely functional. That is,
-// the model Step function should not modify the given state (or input or
-// output), but return a new state.
-//
-// Only the Init, Step, and Equal functions are necessary to specify if you
+// Only the Init and Step functions are necessary to specify if you
 // just want to test histories for linearizability.
 //
 // Implementing the partition functions can greatly improve performance. If
 // you're implementing the partition function, the model Init and Step
 // functions can be per-partition. For example, if your specification is for a
-// key-value store and you partition by key, then the per-partition state
+// key-value store, and you partition by key, then the per-partition state
 // representation can just be a single value rather than a map.
 //
 // Implementing DescribeOperation and DescribeState will produce nicer
@@ -86,8 +82,7 @@ type Model[S State[S]] struct {
 	Init func() S
 	// Step function for the system. Returns whether the system
 	// could take this step with the given inputs and outputs and also
-	// returns the new state. This function must be a pure function: it
-	// cannot mutate the given state.
+	// returns the new state. This function can mutate the state.
 	Step func(state S, input interface{}, output interface{}) (bool, S)
 	// For visualization, describe an operation as a string. For example,
 	// "Get('x') -> 'y'". Can be omitted if you're not producing

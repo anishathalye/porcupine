@@ -64,7 +64,7 @@ func computeVisualizationData[S State[S]](model Model[S], info linearizationInfo
 			state := model.Init()
 			for j, histId := range partial {
 				var ok bool
-				ok, state = model.Step(state, callValue[histId], returnValue[histId])
+				ok, state = model.Step(state.Clone(), callValue[histId], returnValue[histId])
 				if !ok {
 					panic("valid partial linearization returned non-ok result from model step")
 				}
