@@ -15,17 +15,27 @@ type State[S any] interface {
 	Equals(otherState S) bool
 }
 
+type Input[I any] interface {
+}
+
+type Output[O any] interface {
+}
+
+type InputOutputUnion[I any, O any] interface {
+	Input[I] | Output[O]
+}
+
 // An Operation is an element of a history.
 //
 // This package supports two different representations of histories, as a
 // sequence of Operation or [Event]. In the Operation representation, function
 // call/returns are packaged together, along with timestamps of when the
 // function call was made and when the function call returned.
-type Operation struct {
+type Operation[I Input[I], O Output[O]] struct {
 	ClientId int // optional, unless you want a visualization; zero-indexed
-	Input    interface{}
+	Input    I
 	Call     int64 // invocation timestamp
-	Output   interface{}
+	Output   O
 	Return   int64 // response timestamp
 }
 
@@ -47,10 +57,10 @@ const (
 //
 // The Id field is used to match a function call event with its corresponding
 // return event.
-type Event struct {
+type Event[I Input[I], O Output[O]] struct {
 	ClientId int // optional, unless you want a visualization; zero-indexed
 	Kind     EventKind
-	Value    interface{}
+	Value    InputOutputUnion[I, O]
 	Id       int
 }
 
@@ -76,8 +86,8 @@ type Model[S State[S], I any, O any] struct {
 	// Partition functions, such that a history is linearizable if and only
 	// if each partition is linearizable. If left nil, this package will
 	// skip partitioning.
-	Partition      func(history []Operation) [][]Operation
-	PartitionEvent func(history []Event) [][]Event
+	Partition      func(history []Operation[I, O]) [][]Operation[I, O]
+	PartitionEvent func(history []Event[I, O]) [][]Event[I, O]
 	// Init returns the initial state of the system
 	Init func() S
 	// Step function for the system. Returns whether the system
@@ -92,14 +102,14 @@ type Model[S State[S], I any, O any] struct {
 
 // noPartition is a fallback partition function that partitions the history
 // into a single partition containing all of the operations.
-func noPartition(history []Operation) [][]Operation {
-	return [][]Operation{history}
+func noPartition[I any, O any](history []Operation[I, O]) [][]Operation[I, O] {
+	return [][]Operation[I, O]{history}
 }
 
 // noPartitionEvent is a fallback partition function that partitions the
 // history into a single partition containing all of the events.
-func noPartitionEvent(history []Event) [][]Event {
-	return [][]Event{history}
+func noPartitionEvent[I any, O any](history []Event[I, O]) [][]Event[I, O] {
+	return [][]Event[I, O]{history}
 }
 
 // defaultDescribeOperation is a fallback to convert an operation to a string.

@@ -44,6 +44,24 @@ func (i intSliceState) String() string {
 	return ""
 }
 
+type mapState map[string]string
+
+func (m mapState) Clone() mapState {
+	m2 := make(map[string]string)
+	for k, v := range m {
+		m2[k] = v
+	}
+	return m2
+}
+
+func (m mapState) Equals(otherState mapState) bool {
+	return reflect.DeepEqual(m, otherState)
+}
+
+func (m mapState) String() string {
+	return ""
+}
+
 type stringState string
 
 func (i stringState) Clone() stringState {
@@ -91,7 +109,7 @@ func TestRegisterModel(t *testing.T) {
 	// examples taken from http://nil.csail.mit.edu/6.824/2017/quizzes/q2-17-ans.pdf
 	// section VII
 
-	ops := []Operation{
+	ops := []Operation[registerInput, int]{
 		{0, registerInput{false, 100}, 0, 0, 100},
 		{1, registerInput{true, 0}, 25, 100, 75},
 		{2, registerInput{true, 0}, 30, 0, 60},
@@ -102,7 +120,7 @@ func TestRegisterModel(t *testing.T) {
 	}
 
 	// same example as above, but with Event
-	events := []Event{
+	events := []Event[registerInput, int]{
 		{0, CallEvent, registerInput{false, 100}, 0},
 		{1, CallEvent, registerInput{true, 0}, 1},
 		{2, CallEvent, registerInput{true, 0}, 2},
@@ -115,7 +133,7 @@ func TestRegisterModel(t *testing.T) {
 		t.Fatal("expected operations to be linearizable")
 	}
 
-	ops = []Operation{
+	ops = []Operation[registerInput, int]{
 		{0, registerInput{false, 200}, 0, 0, 100},
 		{1, registerInput{true, 0}, 10, 200, 30},
 		{2, registerInput{true, 0}, 40, 0, 90},
@@ -126,7 +144,7 @@ func TestRegisterModel(t *testing.T) {
 	}
 
 	// same example as above, but with Event
-	events = []Event{
+	events = []Event[registerInput, int]{
 		{0, CallEvent, registerInput{false, 200}, 0},
 		{1, CallEvent, registerInput{true, 0}, 1},
 		{1, ReturnEvent, 200, 1},
@@ -141,7 +159,7 @@ func TestRegisterModel(t *testing.T) {
 }
 
 func TestZeroDuration(t *testing.T) {
-	ops := []Operation{
+	ops := []Operation[registerInput, int]{
 		{0, registerInput{false, 100}, 0, 0, 100},
 		{1, registerInput{true, 0}, 25, 100, 75},
 		{2, registerInput{true, 0}, 30, 0, 30},
@@ -154,7 +172,7 @@ func TestZeroDuration(t *testing.T) {
 
 	visualizeTempFile(t, registerModel, info)
 
-	ops = []Operation{
+	ops = []Operation[registerInput, int]{
 		{0, registerInput{false, 200}, 0, 0, 100},
 		{1, registerInput{true, 0}, 10, 200, 10},
 		{2, registerInput{true, 0}, 10, 200, 10},
@@ -229,7 +247,7 @@ var etcdModel = Model[intState, etcdInput, etcdOutput]{
 	},
 }
 
-func parseJepsenLog(filename string) []Event {
+func parseJepsenLog(filename string) []Event[etcdInput, etcdOutput] {
 	file, err := os.Open(filename)
 	if err != nil {
 		panic("can't open file")
@@ -246,7 +264,7 @@ func parseJepsenLog(filename string) []Event {
 	returnCas, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:(ok|fail)\s+:cas\s+\[(\d+)\s+(\d+)\]$`)
 	timeoutRead, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:fail\s+:read\s+:timed-out$`)
 
-	var events []Event = nil
+	var events []Event[etcdInput, etcdOutput] = nil
 
 	id := 0
 	procIdMap := make(map[int]int)
@@ -266,14 +284,14 @@ func parseJepsenLog(filename string) []Event {
 		case invokeRead.MatchString(line):
 			args := invokeRead.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
-			events = append(events, Event{proc, CallEvent, etcdInput{op: 0}, id})
+			events = append(events, Event[etcdInput, etcdOutput]{proc, CallEvent, etcdInput{op: 0}, id})
 			procIdMap[proc] = id
 			id++
 		case invokeWrite.MatchString(line):
 			args := invokeWrite.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			value, _ := strconv.Atoi(args[2])
-			events = append(events, Event{proc, CallEvent, etcdInput{op: 1, arg1: value}, id})
+			events = append(events, Event[etcdInput, etcdOutput]{proc, CallEvent, etcdInput{op: 1, arg1: value}, id})
 			procIdMap[proc] = id
 			id++
 		case invokeCas.MatchString(line):
@@ -281,7 +299,7 @@ func parseJepsenLog(filename string) []Event {
 			proc, _ := strconv.Atoi(args[1])
 			from, _ := strconv.Atoi(args[2])
 			to, _ := strconv.Atoi(args[3])
-			events = append(events, Event{proc, CallEvent, etcdInput{op: 2, arg1: from, arg2: to}, id})
+			events = append(events, Event[etcdInput, etcdOutput]{proc, CallEvent, etcdInput{op: 2, arg1: from, arg2: to}, id})
 			procIdMap[proc] = id
 			id++
 		case returnRead.MatchString(line):
@@ -295,19 +313,19 @@ func parseJepsenLog(filename string) []Event {
 			}
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{proc, ReturnEvent, etcdOutput{exists: exists, value: value}, matchId})
+			events = append(events, Event[etcdInput, etcdOutput]{proc, ReturnEvent, etcdOutput{exists: exists, value: value}, matchId})
 		case returnWrite.MatchString(line):
 			args := returnWrite.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{proc, ReturnEvent, etcdOutput{}, matchId})
+			events = append(events, Event[etcdInput, etcdOutput]{proc, ReturnEvent, etcdOutput{}, matchId})
 		case returnCas.MatchString(line):
 			args := returnCas.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{proc, ReturnEvent, etcdOutput{ok: args[2] == "ok"}, matchId})
+			events = append(events, Event[etcdInput, etcdOutput]{proc, ReturnEvent, etcdOutput{ok: args[2] == "ok"}, matchId})
 		case timeoutRead.MatchString(line):
 			// timing out a read and then continuing operations is fine
 			// we could just delete the read from the events, but we do this the lazy way
@@ -316,12 +334,12 @@ func parseJepsenLog(filename string) []Event {
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
 			// okay to put the return here in the history
-			events = append(events, Event{proc, ReturnEvent, etcdOutput{unknown: true}, matchId})
+			events = append(events, Event[etcdInput, etcdOutput]{proc, ReturnEvent, etcdOutput{unknown: true}, matchId})
 		}
 	}
 
 	for proc, matchId := range procIdMap {
-		events = append(events, Event{proc, ReturnEvent, etcdOutput{unknown: true}, matchId})
+		events = append(events, Event[etcdInput, etcdOutput]{proc, ReturnEvent, etcdOutput{unknown: true}, matchId})
 	}
 
 	return events
@@ -1177,10 +1195,10 @@ type kvOutput struct {
 }
 
 var kvModel = Model[stringState, kvInput, kvOutput]{
-	Partition: func(history []Operation) [][]Operation {
-		m := make(map[string][]Operation)
+	Partition: func(history []Operation[kvInput, kvOutput]) [][]Operation[kvInput, kvOutput] {
+		m := make(map[string][]Operation[kvInput, kvOutput])
 		for _, v := range history {
-			key := v.Input.(kvInput).key
+			key := v.Input.key
 			m[key] = append(m[key], v)
 		}
 		keys := make([]string, 0, len(m))
@@ -1188,14 +1206,14 @@ var kvModel = Model[stringState, kvInput, kvOutput]{
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		ret := make([][]Operation, 0, len(keys))
+		ret := make([][]Operation[kvInput, kvOutput], 0, len(keys))
 		for _, k := range keys {
 			ret = append(ret, m[k])
 		}
 		return ret
 	},
-	PartitionEvent: func(history []Event) [][]Event {
-		m := make(map[string][]Event)
+	PartitionEvent: func(history []Event[kvInput, kvOutput]) [][]Event[kvInput, kvOutput] {
+		m := make(map[string][]Event[kvInput, kvOutput])
 		match := make(map[int]string) // id -> key
 		for _, v := range history {
 			if v.Kind == CallEvent {
@@ -1207,7 +1225,7 @@ var kvModel = Model[stringState, kvInput, kvOutput]{
 				m[key] = append(m[key], v)
 			}
 		}
-		var ret [][]Event
+		var ret [][]Event[kvInput, kvOutput]
 		for _, v := range m {
 			ret = append(ret, v)
 		}
@@ -1245,43 +1263,25 @@ var kvModel = Model[stringState, kvInput, kvOutput]{
 //
 // this is a silly way to do things (it's way slower!) but good for
 // demonstration, testing, and benchmark purposes
-var kvNoPartitionModel = Model{
-	Init: func() interface{} {
-		return make(map[string]string)
-	},
-	Step: func(state, input, output interface{}) (bool, interface{}) {
-		inp := input.(kvInput)
-		out := output.(kvOutput)
-		st := state.(map[string]string)
+var kvNoPartitionModel = Model[mapState, kvInput, kvOutput]{
+	Init: func() mapState { return mapState{} },
+	Step: func(st mapState, inp kvInput, out kvOutput) (bool, mapState) {
 		if inp.op == 0 {
 			// get
-			return out.value == st[inp.key], state
+			return out.value == st[inp.key], st
 		} else if inp.op == 1 {
 			// put
-			st2 := cloneMap(st)
-			st2[inp.key] = inp.value
-			return true, st2
+			st[inp.key] = inp.value
+			return true, st
 		} else {
 			// append
-			st2 := cloneMap(st)
-			st2[inp.key] = st2[inp.key] + inp.value
-			return true, st2
+			st[inp.key] = st[inp.key] + inp.value
+			return true, st
 		}
 	},
-	Equal: func(state1, state2 interface{}) bool {
-		return reflect.DeepEqual(state1, state2)
-	},
 }
 
-func cloneMap(m map[string]string) map[string]string {
-	m2 := make(map[string]string)
-	for k, v := range m {
-		m2[k] = v
-	}
-	return m2
-}
-
-func parseKvLog(filename string) []Event {
+func parseKvLog(filename string) []Event[kvInput, kvOutput] {
 	file, err := os.Open(filename)
 	if err != nil {
 		panic("can't open file")
@@ -1297,7 +1297,7 @@ func parseKvLog(filename string) []Event {
 	returnPut, _ := regexp.Compile(`{:process (\d+), :type :ok, :f :put, :key ".*", :value ".*"}`)
 	returnAppend, _ := regexp.Compile(`{:process (\d+), :type :ok, :f :append, :key ".*", :value ".*"}`)
 
-	var events []Event = nil
+	var events []Event[kvInput, kvOutput] = nil
 
 	id := 0
 	procIdMap := make(map[int]int)
@@ -1317,19 +1317,19 @@ func parseKvLog(filename string) []Event {
 		case invokeGet.MatchString(line):
 			args := invokeGet.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
-			events = append(events, Event{proc, CallEvent, kvInput{op: 0, key: args[2]}, id})
+			events = append(events, Event[kvInput, kvOutput]{proc, CallEvent, kvInput{op: 0, key: args[2]}, id})
 			procIdMap[proc] = id
 			id++
 		case invokePut.MatchString(line):
 			args := invokePut.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
-			events = append(events, Event{proc, CallEvent, kvInput{op: 1, key: args[2], value: args[3]}, id})
+			events = append(events, Event[kvInput, kvOutput]{proc, CallEvent, kvInput{op: 1, key: args[2], value: args[3]}, id})
 			procIdMap[proc] = id
 			id++
 		case invokeAppend.MatchString(line):
 			args := invokeAppend.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
-			events = append(events, Event{proc, CallEvent, kvInput{op: 2, key: args[2], value: args[3]}, id})
+			events = append(events, Event[kvInput, kvOutput]{proc, CallEvent, kvInput{op: 2, key: args[2], value: args[3]}, id})
 			procIdMap[proc] = id
 			id++
 		case returnGet.MatchString(line):
@@ -1337,37 +1337,41 @@ func parseKvLog(filename string) []Event {
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{proc, ReturnEvent, kvOutput{args[2]}, matchId})
+			events = append(events, Event[kvInput, kvOutput]{proc, ReturnEvent, kvOutput{args[2]}, matchId})
 		case returnPut.MatchString(line):
 			args := returnPut.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{proc, ReturnEvent, kvOutput{}, matchId})
+			events = append(events, Event[kvInput, kvOutput]{proc, ReturnEvent, kvOutput{}, matchId})
 		case returnAppend.MatchString(line):
 			args := returnAppend.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{proc, ReturnEvent, kvOutput{}, matchId})
+			events = append(events, Event[kvInput, kvOutput]{proc, ReturnEvent, kvOutput{}, matchId})
 		}
 	}
 
 	for proc, matchId := range procIdMap {
-		events = append(events, Event{proc, ReturnEvent, kvOutput{}, matchId})
+		events = append(events, Event[kvInput, kvOutput]{proc, ReturnEvent, kvOutput{}, matchId})
 	}
 
 	return events
 }
 
-func checkKv(t *testing.T, logName string, correct bool, partition bool) {
+func checkKvPartition(t *testing.T, logName string, correct bool) {
 	events := parseKvLog(fmt.Sprintf("test_data/kv/%s.txt", logName))
-	var model Model
-	if partition {
-		model = kvModel
-	} else {
-		model = kvNoPartitionModel
+	model := kvModel
+	res := CheckEvents(model, events)
+	if res != correct {
+		t.Fatalf("expected output %t, got output %t", correct, res)
 	}
+}
+
+func checkKvNoPartition(t *testing.T, logName string, correct bool) {
+	events := parseKvLog(fmt.Sprintf("test_data/kv/%s.txt", logName))
+	model := kvNoPartitionModel
 	res := CheckEvents(model, events)
 	if res != correct {
 		t.Fatalf("expected output %t, got output %t", correct, res)
@@ -1375,35 +1379,35 @@ func checkKv(t *testing.T, logName string, correct bool, partition bool) {
 }
 
 func TestKv1ClientOk(t *testing.T) {
-	checkKv(t, "c01-ok", true, true)
+	checkKvPartition(t, "c01-ok", true)
 }
 
 func TestKv1ClientBad(t *testing.T) {
-	checkKv(t, "c01-bad", false, true)
+	checkKvPartition(t, "c01-bad", false)
 }
 
 func TestKv10ClientsOk(t *testing.T) {
-	checkKv(t, "c10-ok", true, true)
+	checkKvPartition(t, "c10-ok", true)
 }
 
 func TestKv10ClientsBad(t *testing.T) {
-	checkKv(t, "c10-bad", false, true)
+	checkKvPartition(t, "c10-bad", false)
 }
 
 func TestKv50ClientsOk(t *testing.T) {
-	checkKv(t, "c50-ok", true, true)
+	checkKvPartition(t, "c50-ok", true)
 }
 
 func TestKv50ClientsBad(t *testing.T) {
-	checkKv(t, "c50-bad", false, true)
+	checkKvPartition(t, "c50-bad", false)
 }
 
 func TestKvNoPartition1ClientOk(t *testing.T) {
-	checkKv(t, "c01-ok", true, false)
+	checkKvNoPartition(t, "c01-ok", true)
 }
 
 func TestKvNoPartition1ClientBad(t *testing.T) {
-	checkKv(t, "c01-bad", false, false)
+	checkKvNoPartition(t, "c01-bad", false)
 }
 
 // takes about 90 seconds to run
@@ -1411,7 +1415,7 @@ func TestKvNoPartition10ClientsOk(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping testing in short mode")
 	}
-	checkKv(t, "c10-ok", true, false)
+	checkKvNoPartition(t, "c10-ok", true)
 }
 
 // takes about 60 seconds to run
@@ -1419,17 +1423,24 @@ func TestKvNoPartition10ClientsBad(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping testing in short mode")
 	}
-	checkKv(t, "c10-bad", false, false)
+	checkKvNoPartition(t, "c10-bad", false)
 }
 
-func benchKv(b *testing.B, logName string, correct bool, partition bool) {
+func benchKv(b *testing.B, logName string, correct bool) {
 	events := parseKvLog(fmt.Sprintf("test_data/kv/%s.txt", logName))
-	var model Model
-	if partition {
-		model = kvModel
-	} else {
-		model = kvNoPartitionModel
+	model := kvModel
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		res := CheckEvents(model, events)
+		if res != correct {
+			b.Fatalf("expected output %t, got output %t", correct, res)
+		}
 	}
+}
+
+func benchKvNoPartition(b *testing.B, logName string, correct bool) {
+	events := parseKvLog(fmt.Sprintf("test_data/kv/%s.txt", logName))
+	model := kvNoPartitionModel
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		res := CheckEvents(model, events)
@@ -1440,35 +1451,35 @@ func benchKv(b *testing.B, logName string, correct bool, partition bool) {
 }
 
 func BenchmarkKv1ClientOk(b *testing.B) {
-	benchKv(b, "c01-ok", true, true)
+	benchKv(b, "c01-ok", true)
 }
 
 func BenchmarkKv1ClientBad(b *testing.B) {
-	benchKv(b, "c01-bad", false, true)
+	benchKv(b, "c01-bad", false)
 }
 
 func BenchmarkKv10ClientsOk(b *testing.B) {
-	benchKv(b, "c10-ok", true, true)
+	benchKv(b, "c10-ok", true)
 }
 
 func BenchmarkKv10ClientsBad(b *testing.B) {
-	benchKv(b, "c10-bad", false, true)
+	benchKv(b, "c10-bad", false)
 }
 
 func BenchmarkKv50ClientsOk(b *testing.B) {
-	benchKv(b, "c50-ok", true, true)
+	benchKv(b, "c50-ok", true)
 }
 
 func BenchmarkKv50ClientsBad(b *testing.B) {
-	benchKv(b, "c50-bad", false, true)
+	benchKv(b, "c50-bad", false)
 }
 
 func BenchmarkKvNoPartition1ClientOk(b *testing.B) {
-	benchKv(b, "c01-ok", true, false)
+	benchKvNoPartition(b, "c01-ok", true)
 }
 
 func BenchmarkKvNoPartition1ClientBad(b *testing.B) {
-	benchKv(b, "c01-bad", false, false)
+	benchKvNoPartition(b, "c01-bad", false)
 }
 
 // takes about 90 seconds to run
@@ -1476,7 +1487,7 @@ func BenchmarkKvNoPartition10ClientsOk(b *testing.B) {
 	if testing.Short() {
 		b.Skip("skipping benchmark in short mode")
 	}
-	benchKv(b, "c10-ok", true, false)
+	benchKvNoPartition(b, "c10-ok", true)
 }
 
 // takes about 60 seconds to run
@@ -1484,7 +1495,7 @@ func BenchmarkKvNoPartition10ClientsBad(b *testing.B) {
 	if testing.Short() {
 		b.Skip("skipping benchmark in short mode")
 	}
-	benchKv(b, "c10-bad", false, false)
+	benchKvNoPartition(b, "c10-bad", false)
 }
 
 func TestSetModel(t *testing.T) {
@@ -1526,7 +1537,7 @@ func TestSetModel(t *testing.T) {
 		},
 	}
 
-	events := []Event{
+	events := []Event[setInput, setOutput]{
 		{0, CallEvent, setInput{true, 100}, 0},
 		{1, CallEvent, setInput{true, 0}, 1},
 		{2, CallEvent, setInput{false, 0}, 2},
@@ -1539,7 +1550,7 @@ func TestSetModel(t *testing.T) {
 		t.Fatal("expected operations to be linearizable")
 	}
 
-	events = []Event{
+	events = []Event[setInput, setOutput]{
 		{0, CallEvent, setInput{true, 100}, 0},
 		{1, CallEvent, setInput{true, 110}, 1},
 		{2, CallEvent, setInput{false, 0}, 2},
@@ -1552,7 +1563,7 @@ func TestSetModel(t *testing.T) {
 		t.Fatal("expected operations to be linearizable")
 	}
 
-	events = []Event{
+	events = []Event[setInput, setOutput]{
 		{0, CallEvent, setInput{true, 100}, 0},
 		{1, CallEvent, setInput{true, 110}, 1},
 		{2, CallEvent, setInput{false, 0}, 2},
@@ -1565,7 +1576,7 @@ func TestSetModel(t *testing.T) {
 		t.Fatal("expected operations to be linearizable")
 	}
 
-	events = []Event{
+	events = []Event[setInput, setOutput]{
 		{0, CallEvent, setInput{true, 100}, 0},
 		{1, CallEvent, setInput{true, 110}, 1},
 		{2, CallEvent, setInput{false, 0}, 2},

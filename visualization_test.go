@@ -19,7 +19,7 @@ func visualizeTempFile[S State[S], I any, O any](t *testing.T, model Model[S, I,
 }
 
 func TestVisualizationMultipleLengths(t *testing.T) {
-	ops := []Operation{
+	ops := []Operation[kvInput, kvOutput]{
 		{0, kvInput{op: 0, key: "x"}, 0, kvOutput{"w"}, 100},
 		{1, kvInput{op: 1, key: "x", value: "y"}, 5, kvOutput{}, 10},
 		{2, kvInput{op: 1, key: "x", value: "z"}, 0, kvOutput{}, 10},
@@ -69,7 +69,7 @@ func TestVisualizationMultipleLengths(t *testing.T) {
 func TestRegisterModelReadme(t *testing.T) {
 	// basically the code from the README
 
-	events := []Event{
+	events := []Event[registerInput, int]{
 		// C0: Write(100)
 		{Kind: CallEvent, Value: registerInput{false, 100}, Id: 0, ClientId: 0},
 		// C1: Read()
@@ -93,7 +93,7 @@ func TestRegisterModelReadme(t *testing.T) {
 
 	visualizeTempFile(t, registerModel, info)
 
-	events = []Event{
+	events = []Event[registerInput, int]{
 		// C0: Write(200)
 		{Kind: CallEvent, Value: registerInput{false, 200}, Id: 0, ClientId: 0},
 		// C1: Read()

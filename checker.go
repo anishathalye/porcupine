@@ -53,7 +53,7 @@ func (a byTime) Less(i, j int) bool {
 	return a[i].kind == callEntry && a[j].kind == returnEntry
 }
 
-func makeEntries(history []Operation) []entry {
+func makeEntries[I any, O any](history []Operation[I, O]) []entry {
 	var entries []entry = nil
 	id := 0
 	for _, elem := range history {
@@ -105,15 +105,15 @@ func length(n *node) int {
 	return l
 }
 
-func renumber(events []Event) []Event {
-	var e []Event
+func renumber[I any, O any](events []Event[I, O]) []Event[I, O] {
+	var e []Event[I, O]
 	m := make(map[int]int) // renumbering
 	id := 0
 	for _, v := range events {
 		if r, ok := m[v.Id]; ok {
-			e = append(e, Event{v.ClientId, v.Kind, v.Value, r})
+			e = append(e, Event[I, O]{v.ClientId, v.Kind, v.Value, r})
 		} else {
-			e = append(e, Event{v.ClientId, v.Kind, v.Value, id})
+			e = append(e, Event[I, O]{v.ClientId, v.Kind, v.Value, id})
 			m[v.Id] = id
 			id++
 		}
@@ -121,7 +121,7 @@ func renumber(events []Event) []Event {
 	return e
 }
 
-func convertEntries(events []Event) []entry {
+func convertEntries[I any, O any](events []Event[I, O]) []entry {
 	var entries []entry
 	for i, elem := range events {
 		kind := callEntry
@@ -270,10 +270,10 @@ func checkSingle[S State[S], I any, O any](model Model[S, I, O], history []entry
 
 func fillDefault[S State[S], I any, O any](model Model[S, I, O]) Model[S, I, O] {
 	if model.Partition == nil {
-		model.Partition = noPartition
+		model.Partition = noPartition[I, O]
 	}
 	if model.PartitionEvent == nil {
-		model.PartitionEvent = noPartitionEvent
+		model.PartitionEvent = noPartitionEvent[I, O]
 	}
 	if model.DescribeOperation == nil {
 		model.DescribeOperation = defaultDescribeOperation[I, O]
@@ -360,7 +360,7 @@ loop:
 	return result, info
 }
 
-func checkEvents[S State[S], I any, O any](model Model[S, I, O], history []Event, verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
+func checkEvents[S State[S], I any, O any](model Model[S, I, O], history []Event[I, O], verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
 	model = fillDefault(model)
 	partitions := model.PartitionEvent(history)
 	l := make([][]entry, len(partitions))
@@ -370,7 +370,7 @@ func checkEvents[S State[S], I any, O any](model Model[S, I, O], history []Event
 	return checkParallel(model, l, verbose, timeout)
 }
 
-func checkOperations[S State[S], I any, O any](model Model[S, I, O], history []Operation, verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
+func checkOperations[S State[S], I any, O any](model Model[S, I, O], history []Operation[I, O], verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
 	model = fillDefault(model)
 	partitions := model.Partition(history)
 	l := make([][]entry, len(partitions))
