@@ -68,8 +68,7 @@ func computeVisualizationData[S State[S]](model Model[S], info linearizationInfo
 				if !ok {
 					panic("valid partial linearization returned non-ok result from model step")
 				}
-				stateDesc := model.DescribeState(state)
-				linearization[j] = linearizationStep{histId, stateDesc}
+				linearization[j] = linearizationStep{histId, state.String()}
 				if largestSize[histId] < len(partial) {
 					largestSize[histId] = len(partial)
 					largestIndex[histId] = i

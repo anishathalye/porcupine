@@ -137,14 +137,14 @@ func makeLinkedEntries(entries []entry) *node {
 	return root
 }
 
-type cacheEntry struct {
+type cacheEntry[S State[S]] struct {
 	linearized bitset
-	state      interface{}
+	state      S
 }
 
-func cacheContains[S State[S]](model Model[S], cache map[uint64][]cacheEntry, entry cacheEntry) bool {
+func cacheContains[S State[S]](cache map[uint64][]cacheEntry[S], entry cacheEntry[S]) bool {
 	for _, elem := range cache[entry.linearized.hash()] {
-		if entry.linearized.equals(elem.linearized) && model.Equal(entry.state, elem.state) {
+		if entry.linearized.equals(elem.linearized) && entry.state.Equals(elem.state) {
 			return true
 		}
 	}
@@ -180,7 +180,7 @@ func checkSingle[S State[S]](model Model[S], history []entry, computePartial boo
 	entry := makeLinkedEntries(history)
 	n := length(entry) / 2
 	linearized := newBitset(uint(n))
-	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
+	cache := make(map[uint64][]cacheEntry[S]) // map from hash to cache entry
 	var calls []callsEntry[S]
 	// longest linearizable prefix that includes the given entry
 	longest := make([]*[]int, n)
@@ -196,8 +196,8 @@ func checkSingle[S State[S]](model Model[S], history []entry, computePartial boo
 			ok, newState := model.Step(state, entry.value, matching.value)
 			if ok {
 				newLinearized := linearized.clone().set(uint(entry.id))
-				newCacheEntry := cacheEntry{newLinearized, newState}
-				if !cacheContains(model, cache, newCacheEntry) {
+				newCacheEntry := cacheEntry[S]{newLinearized, newState}
+				if !cacheContains(cache, newCacheEntry) {
 					hash := newLinearized.hash()
 					cache[hash] = append(cache[hash], newCacheEntry)
 					calls = append(calls, callsEntry[S]{entry, state})
@@ -259,14 +259,8 @@ func fillDefault[S State[S]](model Model[S]) Model[S] {
 	if model.PartitionEvent == nil {
 		model.PartitionEvent = noPartitionEvent
 	}
-	if model.Equal == nil {
-		model.Equal = shallowEqual
-	}
 	if model.DescribeOperation == nil {
 		model.DescribeOperation = defaultDescribeOperation
-	}
-	if model.DescribeState == nil {
-		model.DescribeState = defaultDescribeState
 	}
 	return model
 }

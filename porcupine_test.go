@@ -1536,9 +1536,6 @@ func TestSetModel(t *testing.T) {
 			sort.Ints(out.values)
 			return out.unknown || reflect.DeepEqual(st, out.values), out.values
 		},
-		Equal: func(state1, state2 interface{}) bool {
-			return reflect.DeepEqual(state1, state2)
-		},
 	}
 
 	events := []Event{

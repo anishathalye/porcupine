@@ -84,22 +84,15 @@ type Model[S State[S]] struct {
 	PartitionEvent func(history []Event) [][]Event
 	// Init returns the initial state of the system
 	Init func() S
-	// Step function for the system. Returns whether or not the system
+	// Step function for the system. Returns whether the system
 	// could take this step with the given inputs and outputs and also
 	// returns the new state. This function must be a pure function: it
 	// cannot mutate the given state.
 	Step func(state S, input interface{}, output interface{}) (bool, S)
-	// Equality on states. If left nil, this package will use == as a
-	// fallback ([ShallowEqual]).
-	Equal func(state1, state2 interface{}) bool
 	// For visualization, describe an operation as a string. For example,
 	// "Get('x') -> 'y'". Can be omitted if you're not producing
 	// visualizations.
 	DescribeOperation func(input interface{}, output interface{}) string
-	// For visualization purposes, describe a state as a string. For
-	// example, "{'x' -> 'y', 'z' -> 'w'}". Can be omitted if you're not
-	// producing visualizations.
-	DescribeState func(state interface{}) string
 }
 
 // noPartition is a fallback partition function that partitions the history
@@ -114,22 +107,10 @@ func noPartitionEvent(history []Event) [][]Event {
 	return [][]Event{history}
 }
 
-// shallowEqual is a fallback equality function that compares two states using
-// ==.
-func shallowEqual(state1, state2 interface{}) bool {
-	return state1 == state2
-}
-
 // defaultDescribeOperation is a fallback to convert an operation to a string.
 // It renders inputs and outputs using the "%v" format specifier.
 func defaultDescribeOperation(input interface{}, output interface{}) string {
 	return fmt.Sprintf("%v -> %v", input, output)
-}
-
-// defaultDescribeState is a fallback to convert a state to a string. It
-// renders the state using the "%v" format specifier.
-func defaultDescribeState(state interface{}) string {
-	return fmt.Sprintf("%v", state)
 }
 
 // A CheckResult is the result of a linearizability check.
