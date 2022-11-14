@@ -15,10 +15,18 @@ const (
 
 type entry struct {
 	kind     entryKind
-	value    interface{}
+	value    any
 	id       int
 	time     int64
 	clientId int
+}
+
+func entryValueAsInput[I any](e entry) I {
+	return e.value.(I)
+}
+
+func entryValueAsOutput[O any](e entry) O {
+	return e.value.(O)
 }
 
 type linearizationInfo struct {
@@ -60,11 +68,19 @@ func makeEntries(history []Operation) []entry {
 }
 
 type node struct {
-	value interface{}
+	value any
 	match *node // call if match is nil, otherwise return
 	id    int
 	next  *node
 	prev  *node
+}
+
+func nodeValueAsInput[I any](e *node) I {
+	return e.value.(I)
+}
+
+func nodeValueAsOutput[O any](e *node) O {
+	return e.value.(O)
 }
 
 func insertBefore(n *node, mark *node) *node {
@@ -176,7 +192,7 @@ func unlift(entry *node) {
 	entry.next.prev = entry
 }
 
-func checkSingle[S State[S]](model Model[S], history []entry, computePartial bool, kill *int32) (bool, []*[]int) {
+func checkSingle[S State[S], I any, O any](model Model[S, I, O], history []entry, computePartial bool, kill *int32) (bool, []*[]int) {
 	entry := makeLinkedEntries(history)
 	n := length(entry) / 2
 	linearized := newBitset(uint(n))
@@ -193,7 +209,7 @@ func checkSingle[S State[S]](model Model[S], history []entry, computePartial boo
 		}
 		if entry.match != nil {
 			matching := entry.match // the return entry
-			ok, newState := model.Step(state.Clone(), entry.value, matching.value)
+			ok, newState := model.Step(state.Clone(), nodeValueAsInput[I](entry), nodeValueAsOutput[O](matching))
 			if ok {
 				newLinearized := linearized.clone().set(uint(entry.id))
 				newCacheEntry := cacheEntry[S]{newLinearized, newState}
@@ -252,7 +268,7 @@ func checkSingle[S State[S]](model Model[S], history []entry, computePartial boo
 	return true, longest
 }
 
-func fillDefault[S State[S]](model Model[S]) Model[S] {
+func fillDefault[S State[S], I any, O any](model Model[S, I, O]) Model[S, I, O] {
 	if model.Partition == nil {
 		model.Partition = noPartition
 	}
@@ -260,12 +276,12 @@ func fillDefault[S State[S]](model Model[S]) Model[S] {
 		model.PartitionEvent = noPartitionEvent
 	}
 	if model.DescribeOperation == nil {
-		model.DescribeOperation = defaultDescribeOperation
+		model.DescribeOperation = defaultDescribeOperation[I, O]
 	}
 	return model
 }
 
-func checkParallel[S State[S]](model Model[S], history [][]entry, computeInfo bool, timeout time.Duration) (CheckResult, linearizationInfo) {
+func checkParallel[S State[S], I any, O any](model Model[S, I, O], history [][]entry, computeInfo bool, timeout time.Duration) (CheckResult, linearizationInfo) {
 	ok := true
 	timedOut := false
 	results := make(chan bool, len(history))
@@ -344,7 +360,7 @@ loop:
 	return result, info
 }
 
-func checkEvents[S State[S]](model Model[S], history []Event, verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
+func checkEvents[S State[S], I any, O any](model Model[S, I, O], history []Event, verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
 	model = fillDefault(model)
 	partitions := model.PartitionEvent(history)
 	l := make([][]entry, len(partitions))
@@ -354,7 +370,7 @@ func checkEvents[S State[S]](model Model[S], history []Event, verbose bool, time
 	return checkParallel(model, l, verbose, timeout)
 }
 
-func checkOperations[S State[S]](model Model[S], history []Operation, verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
+func checkOperations[S State[S], I any, O any](model Model[S, I, O], history []Operation, verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
 	model = fillDefault(model)
 	partitions := model.Partition(history)
 	l := make([][]entry, len(partitions))

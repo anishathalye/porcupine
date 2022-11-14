@@ -72,7 +72,7 @@ type Event struct {
 // to write models, including models that include partition functions.
 //
 // [test code]: https://github.com/anishathalye/porcupine/blob/master/porcupine_test.go
-type Model[S State[S]] struct {
+type Model[S State[S], I any, O any] struct {
 	// Partition functions, such that a history is linearizable if and only
 	// if each partition is linearizable. If left nil, this package will
 	// skip partitioning.
@@ -83,11 +83,11 @@ type Model[S State[S]] struct {
 	// Step function for the system. Returns whether the system
 	// could take this step with the given inputs and outputs and also
 	// returns the new state. This function can mutate the state.
-	Step func(state S, input interface{}, output interface{}) (bool, S)
+	Step func(state S, input I, output O) (bool, S)
 	// For visualization, describe an operation as a string. For example,
 	// "Get('x') -> 'y'". Can be omitted if you're not producing
 	// visualizations.
-	DescribeOperation func(input interface{}, output interface{}) string
+	DescribeOperation func(input I, output O) string
 }
 
 // noPartition is a fallback partition function that partitions the history
@@ -104,7 +104,7 @@ func noPartitionEvent(history []Event) [][]Event {
 
 // defaultDescribeOperation is a fallback to convert an operation to a string.
 // It renders inputs and outputs using the "%v" format specifier.
-func defaultDescribeOperation(input interface{}, output interface{}) string {
+func defaultDescribeOperation[I any, O any](input I, output O) string {
 	return fmt.Sprintf("%v -> %v", input, output)
 }
 

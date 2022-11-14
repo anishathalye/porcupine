@@ -30,25 +30,25 @@ type partitionVisualizationData struct {
 
 type visualizationData = []partitionVisualizationData
 
-func computeVisualizationData[S State[S]](model Model[S], info linearizationInfo) visualizationData {
+func computeVisualizationData[S State[S], I any, O any](model Model[S, I, O], info linearizationInfo) visualizationData {
 	model = fillDefault(model)
 	data := make(visualizationData, len(info.history))
 	for partition := 0; partition < len(info.history); partition++ {
 		// history
 		n := len(info.history[partition]) / 2
 		history := make([]historyElement, n)
-		callValue := make(map[int]interface{})
-		returnValue := make(map[int]interface{})
+		callValue := make(map[int]I)
+		returnValue := make(map[int]O)
 		for _, elem := range info.history[partition] {
 			switch elem.kind {
 			case callEntry:
 				history[elem.id].ClientId = elem.clientId
 				history[elem.id].Start = elem.time
-				callValue[elem.id] = elem.value
+				callValue[elem.id] = entryValueAsInput[I](elem)
 			case returnEntry:
+				returnValue[elem.id] = entryValueAsOutput[O](elem)
 				history[elem.id].End = elem.time
-				history[elem.id].Description = model.DescribeOperation(callValue[elem.id], elem.value)
-				returnValue[elem.id] = elem.value
+				history[elem.id].Description = model.DescribeOperation(callValue[elem.id], returnValue[elem.id])
 			}
 		}
 		// partial linearizations
@@ -97,7 +97,7 @@ func computeVisualizationData[S State[S]](model Model[S], info linearizationInfo
 //
 // This function writes the visualization, an HTML file with embedded
 // JavaScript and data, to the given output.
-func Visualize[S State[S]](model Model[S], info linearizationInfo, output io.Writer) error {
+func Visualize[S State[S], I any, O any](model Model[S, I, O], info linearizationInfo, output io.Writer) error {
 	data := computeVisualizationData(model, info)
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -112,7 +112,7 @@ func Visualize[S State[S]](model Model[S], info linearizationInfo, output io.Wri
 
 // VisualizePath is a wrapper around [Visualize] to write the visualization to
 // a file path.
-func VisualizePath[S State[S]](model Model[S], info linearizationInfo, path string) error {
+func VisualizePath[S State[S], I any, O any](model Model[S, I, O], info linearizationInfo, path string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err

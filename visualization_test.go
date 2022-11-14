@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func visualizeTempFile[S State[S]](t *testing.T, model Model[S], info linearizationInfo) {
+func visualizeTempFile[S State[S], I any, O any](t *testing.T, model Model[S, I, O], info linearizationInfo) {
 	file, err := os.CreateTemp("", "*.html")
 	if err != nil {
 		t.Fatalf("failed to create temp file")

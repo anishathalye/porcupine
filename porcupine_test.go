@@ -64,12 +64,11 @@ type registerInput struct {
 }
 
 // a sequential specification of a register
-var registerModel = Model[intState]{
+var registerModel = Model[intState, registerInput, int]{
 	Init: func() intState { return intState(0) },
 	// step function: takes a state, input, and output, and returns whether it
 	// was a legal operation, along with a new state
-	Step: func(state intState, input, output interface{}) (bool, intState) {
-		regInput := input.(registerInput)
+	Step: func(state intState, regInput registerInput, output int) (bool, intState) {
 		if regInput.op == false {
 			return true, intState(regInput.value) // always ok to execute a put
 		} else {
@@ -77,11 +76,10 @@ var registerModel = Model[intState]{
 			return readCorrectValue, state // state is unchanged
 		}
 	},
-	DescribeOperation: func(input, output interface{}) string {
-		inp := input.(registerInput)
+	DescribeOperation: func(inp registerInput, output int) string {
 		switch inp.op {
 		case true:
-			return fmt.Sprintf("get() -> '%d'", output.(int))
+			return fmt.Sprintf("get() -> '%d'", output)
 		case false:
 			return fmt.Sprintf("put('%d')", inp.value)
 		}
@@ -181,12 +179,10 @@ type etcdOutput struct {
 	unknown bool // used when operation times out
 }
 
-var etcdModel = Model[intState]{
+var etcdModel = Model[intState, etcdInput, etcdOutput]{
 	Init: func() intState { return intState(-1000000) }, // -1000000 corresponds with nil
-	Step: func(state intState, input interface{}, output interface{}) (bool, intState) {
+	Step: func(state intState, inp etcdInput, out etcdOutput) (bool, intState) {
 		st := int(state)
-		inp := input.(etcdInput)
-		out := output.(etcdOutput)
 		if inp.op == 0 {
 			// read
 			ok := (out.exists == false && st == -1000000) || (out.exists == true && st == out.value) || out.unknown
@@ -204,9 +200,7 @@ var etcdModel = Model[intState]{
 			return ok, intState(result)
 		}
 	},
-	DescribeOperation: func(input, output interface{}) string {
-		inp := input.(etcdInput)
-		out := output.(etcdOutput)
+	DescribeOperation: func(inp etcdInput, out etcdOutput) string {
 		switch inp.op {
 		case 0:
 			var read string
@@ -1182,7 +1176,7 @@ type kvOutput struct {
 	value string
 }
 
-var kvModel = Model[stringState]{
+var kvModel = Model[stringState, kvInput, kvOutput]{
 	Partition: func(history []Operation) [][]Operation {
 		m := make(map[string][]Operation)
 		for _, v := range history {
@@ -1220,9 +1214,7 @@ var kvModel = Model[stringState]{
 		return ret
 	},
 	Init: func() stringState { return "" },
-	Step: func(state stringState, input, output interface{}) (bool, stringState) {
-		inp := input.(kvInput)
-		out := output.(kvOutput)
+	Step: func(state stringState, inp kvInput, out kvOutput) (bool, stringState) {
 		st := string(state)
 		if inp.op == 0 {
 			// get
@@ -1235,9 +1227,7 @@ var kvModel = Model[stringState]{
 			return true, stringState(st + inp.value)
 		}
 	},
-	DescribeOperation: func(input, output interface{}) string {
-		inp := input.(kvInput)
-		out := output.(kvOutput)
+	DescribeOperation: func(inp kvInput, out kvOutput) string {
 		switch inp.op {
 		case 0:
 			return fmt.Sprintf("get('%s') -> '%s'", inp.key, out.value)
@@ -1515,12 +1505,10 @@ func TestSetModel(t *testing.T) {
 		unknown bool  // read
 	}
 
-	setModel := Model[intSliceState]{
+	setModel := Model[intSliceState, setInput, setOutput]{
 		Init: func() intSliceState { return []int{} },
-		Step: func(state intSliceState, input interface{}, output interface{}) (bool, intSliceState) {
+		Step: func(state intSliceState, inp setInput, out setOutput) (bool, intSliceState) {
 			st := []int(state)
-			inp := input.(setInput)
-			out := output.(setOutput)
 
 			if inp.op == true {
 				// always returns true for write
