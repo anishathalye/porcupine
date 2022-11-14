@@ -12,24 +12,68 @@ import (
 	"testing"
 )
 
+type intState int
+
+func (i intState) Clone() intState {
+	return i
+}
+
+func (i intState) Equals(otherState intState) bool {
+	return i == otherState
+}
+
+func (i intState) String() string {
+	return fmt.Sprintf("%d", i)
+}
+
+type intSliceState []int
+
+func (i intSliceState) Clone() intSliceState {
+	ix := make([]int, len(i))
+	for _, i := range i {
+		ix = append(ix, i)
+	}
+	return ix
+}
+
+func (i intSliceState) Equals(otherState intSliceState) bool {
+	return reflect.DeepEqual(i, otherState)
+}
+
+func (i intSliceState) String() string {
+	return ""
+}
+
+type stringState string
+
+func (i stringState) Clone() stringState {
+	return i
+}
+
+func (i stringState) Equals(otherState stringState) bool {
+	return i == otherState
+}
+
+func (i stringState) String() string {
+	return string(i)
+}
+
 type registerInput struct {
 	op    bool // false = put, true = get
 	value int
 }
 
 // a sequential specification of a register
-var registerModel = Model{
-	Init: func() interface{} {
-		return 0
-	},
+var registerModel = Model[intState]{
+	Init: func() intState { return intState(0) },
 	// step function: takes a state, input, and output, and returns whether it
 	// was a legal operation, along with a new state
-	Step: func(state, input, output interface{}) (bool, interface{}) {
+	Step: func(state intState, input, output interface{}) (bool, intState) {
 		regInput := input.(registerInput)
 		if regInput.op == false {
-			return true, regInput.value // always ok to execute a put
+			return true, intState(regInput.value) // always ok to execute a put
 		} else {
-			readCorrectValue := output == state
+			readCorrectValue := output == int(state)
 			return readCorrectValue, state // state is unchanged
 		}
 	},
@@ -137,10 +181,10 @@ type etcdOutput struct {
 	unknown bool // used when operation times out
 }
 
-var etcdModel = Model{
-	Init: func() interface{} { return -1000000 }, // -1000000 corresponds with nil
-	Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
-		st := state.(int)
+var etcdModel = Model[intState]{
+	Init: func() intState { return intState(-1000000) }, // -1000000 corresponds with nil
+	Step: func(state intState, input interface{}, output interface{}) (bool, intState) {
+		st := int(state)
 		inp := input.(etcdInput)
 		out := output.(etcdOutput)
 		if inp.op == 0 {
@@ -149,7 +193,7 @@ var etcdModel = Model{
 			return ok, state
 		} else if inp.op == 1 {
 			// write
-			return true, inp.arg1
+			return true, intState(inp.arg1)
 		} else {
 			// cas
 			ok := (inp.arg1 == st && out.ok) || (inp.arg1 != st && !out.ok) || out.unknown
@@ -157,7 +201,7 @@ var etcdModel = Model{
 			if inp.arg1 == st {
 				result = inp.arg2
 			}
-			return ok, result
+			return ok, intState(result)
 		}
 	},
 	DescribeOperation: func(input, output interface{}) string {
@@ -1138,7 +1182,7 @@ type kvOutput struct {
 	value string
 }
 
-var kvModel = Model{
+var kvModel = Model[stringState]{
 	Partition: func(history []Operation) [][]Operation {
 		m := make(map[string][]Operation)
 		for _, v := range history {
@@ -1175,24 +1219,20 @@ var kvModel = Model{
 		}
 		return ret
 	},
-	Init: func() interface{} {
-		// note: we are modeling a single key's value here;
-		// we're partitioning by key, so this is okay
-		return ""
-	},
-	Step: func(state, input, output interface{}) (bool, interface{}) {
+	Init: func() stringState { return "" },
+	Step: func(state stringState, input, output interface{}) (bool, stringState) {
 		inp := input.(kvInput)
 		out := output.(kvOutput)
-		st := state.(string)
+		st := string(state)
 		if inp.op == 0 {
 			// get
 			return out.value == st, state
 		} else if inp.op == 1 {
 			// put
-			return true, inp.value
+			return true, stringState(inp.value)
 		} else {
 			// append
-			return true, (st + inp.value)
+			return true, stringState(st + inp.value)
 		}
 	},
 	DescribeOperation: func(input, output interface{}) string {
@@ -1475,10 +1515,10 @@ func TestSetModel(t *testing.T) {
 		unknown bool  // read
 	}
 
-	setModel := Model{
-		Init: func() interface{} { return []int{} },
-		Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
-			st := state.([]int)
+	setModel := Model[intSliceState]{
+		Init: func() intSliceState { return []int{} },
+		Step: func(state intSliceState, input interface{}, output interface{}) (bool, intSliceState) {
+			st := []int(state)
 			inp := input.(setInput)
 			out := output.(setOutput)
 

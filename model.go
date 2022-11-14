@@ -2,6 +2,19 @@ package porcupine
 
 import "fmt"
 
+// State describes the state of the system at a given point in time.
+type State[S any] interface {
+	// Stringer implements String() which returns a state representation for visualization purposes.
+	// For example, "{'x' -> 'y', 'z' -> 'w'}".
+	fmt.Stringer
+
+	// Clone makes a deep copy of the given state, this is used to ensure every step
+	// operates on its own state to avoid mutation issues.
+	Clone() S
+	// Equals returns true when this state equals the other state.
+	Equals(otherState S) bool
+}
+
 // An Operation is an element of a history.
 //
 // This package supports two different representations of histories, as a
@@ -63,19 +76,19 @@ type Event struct {
 // to write models, including models that include partition functions.
 //
 // [test code]: https://github.com/anishathalye/porcupine/blob/master/porcupine_test.go
-type Model struct {
+type Model[S State[S]] struct {
 	// Partition functions, such that a history is linearizable if and only
 	// if each partition is linearizable. If left nil, this package will
 	// skip partitioning.
 	Partition      func(history []Operation) [][]Operation
 	PartitionEvent func(history []Event) [][]Event
-	// Initial state of the system.
-	Init func() interface{}
+	// Init returns the initial state of the system
+	Init func() S
 	// Step function for the system. Returns whether or not the system
 	// could take this step with the given inputs and outputs and also
 	// returns the new state. This function must be a pure function: it
 	// cannot mutate the given state.
-	Step func(state interface{}, input interface{}, output interface{}) (bool, interface{})
+	Step func(state S, input interface{}, output interface{}) (bool, S)
 	// Equality on states. If left nil, this package will use == as a
 	// fallback ([ShallowEqual]).
 	Equal func(state1, state2 interface{}) bool

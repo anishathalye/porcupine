@@ -30,7 +30,7 @@ type partitionVisualizationData struct {
 
 type visualizationData = []partitionVisualizationData
 
-func computeVisualizationData(model Model, info linearizationInfo) visualizationData {
+func computeVisualizationData[S State[S]](model Model[S], info linearizationInfo) visualizationData {
 	model = fillDefault(model)
 	data := make(visualizationData, len(info.history))
 	for partition := 0; partition < len(info.history); partition++ {
@@ -98,7 +98,7 @@ func computeVisualizationData(model Model, info linearizationInfo) visualization
 //
 // This function writes the visualization, an HTML file with embedded
 // JavaScript and data, to the given output.
-func Visualize(model Model, info linearizationInfo, output io.Writer) error {
+func Visualize[S State[S]](model Model[S], info linearizationInfo, output io.Writer) error {
 	data := computeVisualizationData(model, info)
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -113,7 +113,7 @@ func Visualize(model Model, info linearizationInfo, output io.Writer) error {
 
 // VisualizePath is a wrapper around [Visualize] to write the visualization to
 // a file path.
-func VisualizePath(model Model, info linearizationInfo, path string) error {
+func VisualizePath[S State[S]](model Model[S], info linearizationInfo, path string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
