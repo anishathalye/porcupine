@@ -254,19 +254,19 @@ func checkSingle(model Model, history []entry, computePartial bool, kill *int32)
 
 func fillDefault(model Model) Model {
 	if model.Partition == nil {
-		model.Partition = NoPartition
+		model.Partition = noPartition
 	}
 	if model.PartitionEvent == nil {
-		model.PartitionEvent = NoPartitionEvent
+		model.PartitionEvent = noPartitionEvent
 	}
 	if model.Equal == nil {
-		model.Equal = ShallowEqual
+		model.Equal = shallowEqual
 	}
 	if model.DescribeOperation == nil {
-		model.DescribeOperation = DefaultDescribeOperation
+		model.DescribeOperation = defaultDescribeOperation
 	}
 	if model.DescribeState == nil {
-		model.DescribeState = DefaultDescribeState
+		model.DescribeState = defaultDescribeState
 	}
 	return model
 }

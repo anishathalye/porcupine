@@ -66,7 +66,7 @@ type Event struct {
 type Model struct {
 	// Partition functions, such that a history is linearizable if and only
 	// if each partition is linearizable. If left nil, this package will
-	// use [NoPartition] / [NoPartitionEvent] as a fallback.
+	// skip partitioning.
 	Partition      func(history []Operation) [][]Operation
 	PartitionEvent func(history []Event) [][]Event
 	// Initial state of the system.
@@ -89,33 +89,33 @@ type Model struct {
 	DescribeState func(state interface{}) string
 }
 
-// NoPartition is a fallback partition function that partitions the history
+// noPartition is a fallback partition function that partitions the history
 // into a single partition containing all of the operations.
-func NoPartition(history []Operation) [][]Operation {
+func noPartition(history []Operation) [][]Operation {
 	return [][]Operation{history}
 }
 
-// NoPartitionEvent is a fallback partition function that partitions the
+// noPartitionEvent is a fallback partition function that partitions the
 // history into a single partition containing all of the events.
-func NoPartitionEvent(history []Event) [][]Event {
+func noPartitionEvent(history []Event) [][]Event {
 	return [][]Event{history}
 }
 
-// ShallowEqual is a fallback equality function that compares two states using
+// shallowEqual is a fallback equality function that compares two states using
 // ==.
-func ShallowEqual(state1, state2 interface{}) bool {
+func shallowEqual(state1, state2 interface{}) bool {
 	return state1 == state2
 }
 
-// DefaultDescribeOperation is a fallback to convert an operation to a string.
+// defaultDescribeOperation is a fallback to convert an operation to a string.
 // It renders inputs and outputs using the "%v" format specifier.
-func DefaultDescribeOperation(input interface{}, output interface{}) string {
+func defaultDescribeOperation(input interface{}, output interface{}) string {
 	return fmt.Sprintf("%v -> %v", input, output)
 }
 
-// DefaultDescribeState is a fallback to convert a state to a string. It
+// defaultDescribeState is a fallback to convert a state to a string. It
 // renders the state using the "%v" format specifier.
-func DefaultDescribeState(state interface{}) string {
+func defaultDescribeState(state interface{}) string {
 	return fmt.Sprintf("%v", state)
 }
 
