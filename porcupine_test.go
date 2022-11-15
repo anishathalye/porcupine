@@ -1392,6 +1392,71 @@ func TestKvNoPartition10ClientsBad(t *testing.T) {
 	checkKv(t, "c10-bad", false, false)
 }
 
+func benchKv(b *testing.B, logName string, correct bool, partition bool) {
+	events := parseKvLog(fmt.Sprintf("test_data/kv/%s.txt", logName))
+	var model Model
+	if partition {
+		model = kvModel
+	} else {
+		model = kvNoPartitionModel
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		res := CheckEvents(model, events)
+		if res != correct {
+			b.Fatalf("expected output %t, got output %t", correct, res)
+		}
+	}
+}
+
+func BenchmarkKv1ClientOk(b *testing.B) {
+	benchKv(b, "c01-ok", true, true)
+}
+
+func BenchmarkKv1ClientBad(b *testing.B) {
+	benchKv(b, "c01-bad", false, true)
+}
+
+func BenchmarkKv10ClientsOk(b *testing.B) {
+	benchKv(b, "c10-ok", true, true)
+}
+
+func BenchmarkKv10ClientsBad(b *testing.B) {
+	benchKv(b, "c10-bad", false, true)
+}
+
+func BenchmarkKv50ClientsOk(b *testing.B) {
+	benchKv(b, "c50-ok", true, true)
+}
+
+func BenchmarkKv50ClientsBad(b *testing.B) {
+	benchKv(b, "c50-bad", false, true)
+}
+
+func BenchmarkKvNoPartition1ClientOk(b *testing.B) {
+	benchKv(b, "c01-ok", true, false)
+}
+
+func BenchmarkKvNoPartition1ClientBad(b *testing.B) {
+	benchKv(b, "c01-bad", false, false)
+}
+
+// takes about 90 seconds to run
+func BenchmarkKvNoPartition10ClientsOk(b *testing.B) {
+	if testing.Short() {
+		b.Skip("skipping benchmark in short mode")
+	}
+	benchKv(b, "c10-ok", true, false)
+}
+
+// takes about 60 seconds to run
+func BenchmarkKvNoPartition10ClientsBad(b *testing.B) {
+	if testing.Short() {
+		b.Skip("skipping benchmark in short mode")
+	}
+	benchKv(b, "c10-bad", false, false)
+}
+
 func TestSetModel(t *testing.T) {
 
 	// Set Model is from Jepsen/Knossos Set.
