@@ -1211,6 +1211,46 @@ var kvModel = Model{
 	},
 }
 
+// uses a map[string]string to represent the state, and doesn't do partitioning
+//
+// this is a silly way to do things (it's way slower!) but good for
+// demonstration, testing, and benchmark purposes
+var kvNoPartitionModel = Model{
+	Init: func() interface{} {
+		return make(map[string]string)
+	},
+	Step: func(state, input, output interface{}) (bool, interface{}) {
+		inp := input.(kvInput)
+		out := output.(kvOutput)
+		st := state.(map[string]string)
+		if inp.op == 0 {
+			// get
+			return out.value == st[inp.key], state
+		} else if inp.op == 1 {
+			// put
+			st2 := cloneMap(st)
+			st2[inp.key] = inp.value
+			return true, st2
+		} else {
+			// append
+			st2 := cloneMap(st)
+			st2[inp.key] = st2[inp.key] + inp.value
+			return true, st2
+		}
+	},
+	Equal: func(state1, state2 interface{}) bool {
+		return reflect.DeepEqual(state1, state2)
+	},
+}
+
+func cloneMap(m map[string]string) map[string]string {
+	m2 := make(map[string]string)
+	for k, v := range m {
+		m2[k] = v
+	}
+	return m2
+}
+
 func parseKvLog(filename string) []Event {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -1290,36 +1330,66 @@ func parseKvLog(filename string) []Event {
 	return events
 }
 
-func checkKv(t *testing.T, logName string, correct bool) {
+func checkKv(t *testing.T, logName string, correct bool, partition bool) {
 	events := parseKvLog(fmt.Sprintf("test_data/kv/%s.txt", logName))
-	res := CheckEvents(kvModel, events)
+	var model Model
+	if partition {
+		model = kvModel
+	} else {
+		model = kvNoPartitionModel
+	}
+	res := CheckEvents(model, events)
 	if res != correct {
 		t.Fatalf("expected output %t, got output %t", correct, res)
 	}
 }
 
 func TestKv1ClientOk(t *testing.T) {
-	checkKv(t, "c01-ok", true)
+	checkKv(t, "c01-ok", true, true)
 }
 
 func TestKv1ClientBad(t *testing.T) {
-	checkKv(t, "c01-bad", false)
+	checkKv(t, "c01-bad", false, true)
 }
 
 func TestKv10ClientsOk(t *testing.T) {
-	checkKv(t, "c10-ok", true)
+	checkKv(t, "c10-ok", true, true)
 }
 
 func TestKv10ClientsBad(t *testing.T) {
-	checkKv(t, "c10-bad", false)
+	checkKv(t, "c10-bad", false, true)
 }
 
 func TestKv50ClientsOk(t *testing.T) {
-	checkKv(t, "c50-ok", true)
+	checkKv(t, "c50-ok", true, true)
 }
 
 func TestKv50ClientsBad(t *testing.T) {
-	checkKv(t, "c50-bad", false)
+	checkKv(t, "c50-bad", false, true)
+}
+
+func TestKvNoPartition1ClientOk(t *testing.T) {
+	checkKv(t, "c01-ok", true, false)
+}
+
+func TestKvNoPartition1ClientBad(t *testing.T) {
+	checkKv(t, "c01-bad", false, false)
+}
+
+// takes about 90 seconds to run
+func TestKvNoPartition10ClientsOk(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testing in short mode")
+	}
+	checkKv(t, "c10-ok", true, false)
+}
+
+// takes about 60 seconds to run
+func TestKvNoPartition10ClientsBad(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testing in short mode")
+	}
+	checkKv(t, "c10-bad", false, false)
 }
 
 func TestSetModel(t *testing.T) {
