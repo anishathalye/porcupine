@@ -37,9 +37,15 @@ const (
 type Event struct {
 	ClientId int // optional, unless you want a visualization; zero-indexed
 	Kind     EventKind
-	Value    interface{}
+	Value    any
 	Id       int
 }
+
+type (
+	State  any
+	Input  any
+	Output any
+)
 
 // A Model is a sequential specification of a system.
 //
@@ -53,7 +59,7 @@ type Event struct {
 // Implementing the partition functions can greatly improve performance. If
 // you're implementing the partition function, the model Init and Step
 // functions can be per-partition. For example, if your specification is for a
-// key-value store and you partition by key, then the per-partition state
+// key-value store, and you partition by key, then the per-partition state
 // representation can just be a single value rather than a map.
 //
 // Implementing DescribeOperation and DescribeState will produce nicer
@@ -63,59 +69,61 @@ type Event struct {
 // to write models, including models that include partition functions.
 //
 // [test code]: https://github.com/anishathalye/porcupine/blob/master/porcupine_test.go
-type Model struct {
+type Model[S State, I Input, O Output] struct {
 	// Partition functions, such that a history is linearizable if and only
 	// if each partition is linearizable. If left nil, this package will
 	// skip partitioning.
 	Partition      func(history []Operation) [][]Operation
 	PartitionEvent func(history []Event) [][]Event
 	// Initial state of the system.
-	Init func() interface{}
-	// Step function for the system. Returns whether or not the system
+	Init func() S
+	// Step function for the system. Returns whether the system
 	// could take this step with the given inputs and outputs and also
 	// returns the new state. This function must be a pure function: it
 	// cannot mutate the given state.
-	Step func(state interface{}, input interface{}, output interface{}) (bool, interface{})
+	Step func(state S, input I, output O) (bool, S)
 	// Equality on states. If left nil, this package will use == as a
 	// fallback ([ShallowEqual]).
-	Equal func(state1, state2 interface{}) bool
+	Equal func(state1, state2 S) bool
 	// For visualization, describe an operation as a string. For example,
 	// "Get('x') -> 'y'". Can be omitted if you're not producing
 	// visualizations.
-	DescribeOperation func(input interface{}, output interface{}) string
+	DescribeOperation func(input I, output O) string
 	// For visualization purposes, describe a state as a string. For
 	// example, "{'x' -> 'y', 'z' -> 'w'}". Can be omitted if you're not
 	// producing visualizations.
-	DescribeState func(state interface{}) string
+	DescribeState func(state S) string
 }
 
 // noPartition is a fallback partition function that partitions the history
-// into a single partition containing all of the operations.
+// into a single partition containing all the operations.
 func noPartition(history []Operation) [][]Operation {
 	return [][]Operation{history}
 }
 
 // noPartitionEvent is a fallback partition function that partitions the
-// history into a single partition containing all of the events.
+// history into a single partition containing all the events.
 func noPartitionEvent(history []Event) [][]Event {
 	return [][]Event{history}
 }
 
 // shallowEqual is a fallback equality function that compares two states using
 // ==.
-func shallowEqual(state1, state2 interface{}) bool {
-	return state1 == state2
+func shallowEqual[S State](state1, state2 S) bool {
+	var st1 any = state1
+	var st2 any = state2
+	return st1 == st2
 }
 
 // defaultDescribeOperation is a fallback to convert an operation to a string.
 // It renders inputs and outputs using the "%v" format specifier.
-func defaultDescribeOperation(input interface{}, output interface{}) string {
+func defaultDescribeOperation[I Input, O Output](input I, output O) string {
 	return fmt.Sprintf("%v -> %v", input, output)
 }
 
 // defaultDescribeState is a fallback to convert a state to a string. It
 // renders the state using the "%v" format specifier.
-func defaultDescribeState(state interface{}) string {
+func defaultDescribeState[S State](state S) string {
 	return fmt.Sprintf("%v", state)
 }
 

@@ -18,28 +18,26 @@ type registerInput struct {
 }
 
 // a sequential specification of a register
-var registerModel = Model{
-	Init: func() interface{} {
+var registerModel = Model[int, registerInput, int]{
+	Init: func() int {
 		return 0
 	},
 	// step function: takes a state, input, and output, and returns whether it
 	// was a legal operation, along with a new state
-	Step: func(state, input, output interface{}) (bool, interface{}) {
-		regInput := input.(registerInput)
-		if regInput.op == false {
-			return true, regInput.value // always ok to execute a put
+	Step: func(state int, input registerInput, output int) (bool, int) {
+		if input.op == false {
+			return true, input.value // always ok to execute a put
 		} else {
 			readCorrectValue := output == state
 			return readCorrectValue, state // state is unchanged
 		}
 	},
-	DescribeOperation: func(input, output interface{}) string {
-		inp := input.(registerInput)
-		switch inp.op {
+	DescribeOperation: func(input registerInput, output int) string {
+		switch input.op {
 		case true:
-			return fmt.Sprintf("get() -> '%d'", output.(int))
+			return fmt.Sprintf("get() -> '%d'", output)
 		case false:
-			return fmt.Sprintf("put('%d')", inp.value)
+			return fmt.Sprintf("put('%d')", input.value)
 		}
 		return "<invalid>" // unreachable
 	},
@@ -137,16 +135,13 @@ type etcdOutput struct {
 	unknown bool // used when operation times out
 }
 
-var etcdModel = Model{
-	Init: func() interface{} { return -1000000 }, // -1000000 corresponds with nil
-	Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
-		st := state.(int)
-		inp := input.(etcdInput)
-		out := output.(etcdOutput)
+var etcdModel = Model[int, etcdInput, etcdOutput]{
+	Init: func() int { return -1000000 }, // -1000000 corresponds with nil
+	Step: func(st int, inp etcdInput, out etcdOutput) (bool, int) {
 		if inp.op == 0 {
 			// read
 			ok := (out.exists == false && st == -1000000) || (out.exists == true && st == out.value) || out.unknown
-			return ok, state
+			return ok, st
 		} else if inp.op == 1 {
 			// write
 			return true, inp.arg1
@@ -160,9 +155,7 @@ var etcdModel = Model{
 			return ok, result
 		}
 	},
-	DescribeOperation: func(input, output interface{}) string {
-		inp := input.(etcdInput)
-		out := output.(etcdOutput)
+	DescribeOperation: func(inp etcdInput, out etcdOutput) string {
 		switch inp.op {
 		case 0:
 			var read string
@@ -1138,7 +1131,7 @@ type kvOutput struct {
 	value string
 }
 
-var kvModel = Model{
+var kvModel = Model[string, kvInput, kvOutput]{
 	Partition: func(history []Operation) [][]Operation {
 		m := make(map[string][]Operation)
 		for _, v := range history {
@@ -1175,18 +1168,15 @@ var kvModel = Model{
 		}
 		return ret
 	},
-	Init: func() interface{} {
+	Init: func() string {
 		// note: we are modeling a single key's value here;
 		// we're partitioning by key, so this is okay
 		return ""
 	},
-	Step: func(state, input, output interface{}) (bool, interface{}) {
-		inp := input.(kvInput)
-		out := output.(kvOutput)
-		st := state.(string)
+	Step: func(st string, inp kvInput, out kvOutput) (bool, string) {
 		if inp.op == 0 {
 			// get
-			return out.value == st, state
+			return out.value == st, st
 		} else if inp.op == 1 {
 			// put
 			return true, inp.value
@@ -1195,9 +1185,7 @@ var kvModel = Model{
 			return true, (st + inp.value)
 		}
 	},
-	DescribeOperation: func(input, output interface{}) string {
-		inp := input.(kvInput)
-		out := output.(kvOutput)
+	DescribeOperation: func(inp kvInput, out kvOutput) string {
 		switch inp.op {
 		case 0:
 			return fmt.Sprintf("get('%s') -> '%s'", inp.key, out.value)
@@ -1215,17 +1203,14 @@ var kvModel = Model{
 //
 // this is a silly way to do things (it's way slower!) but good for
 // demonstration, testing, and benchmark purposes
-var kvNoPartitionModel = Model{
-	Init: func() interface{} {
+var kvNoPartitionModel = Model[map[string]string, kvInput, kvOutput]{
+	Init: func() map[string]string {
 		return make(map[string]string)
 	},
-	Step: func(state, input, output interface{}) (bool, interface{}) {
-		inp := input.(kvInput)
-		out := output.(kvOutput)
-		st := state.(map[string]string)
+	Step: func(st map[string]string, inp kvInput, out kvOutput) (bool, map[string]string) {
 		if inp.op == 0 {
 			// get
-			return out.value == st[inp.key], state
+			return out.value == st[inp.key], st
 		} else if inp.op == 1 {
 			// put
 			st2 := cloneMap(st)
@@ -1238,7 +1223,7 @@ var kvNoPartitionModel = Model{
 			return true, st2
 		}
 	},
-	Equal: func(state1, state2 interface{}) bool {
+	Equal: func(state1, state2 map[string]string) bool {
 		return reflect.DeepEqual(state1, state2)
 	},
 }
@@ -1332,13 +1317,13 @@ func parseKvLog(filename string) []Event {
 
 func checkKv(t *testing.T, logName string, correct bool, partition bool) {
 	events := parseKvLog(fmt.Sprintf("test_data/kv/%s.txt", logName))
-	var model Model
+	res := false
 	if partition {
-		model = kvModel
+		res = CheckEvents(kvModel, events)
 	} else {
-		model = kvNoPartitionModel
+		res = CheckEvents(kvNoPartitionModel, events)
 	}
-	res := CheckEvents(model, events)
+
 	if res != correct {
 		t.Fatalf("expected output %t, got output %t", correct, res)
 	}
@@ -1394,17 +1379,22 @@ func TestKvNoPartition10ClientsBad(t *testing.T) {
 
 func benchKv(b *testing.B, logName string, correct bool, partition bool) {
 	events := parseKvLog(fmt.Sprintf("test_data/kv/%s.txt", logName))
-	var model Model
-	if partition {
-		model = kvModel
-	} else {
-		model = kvNoPartitionModel
-	}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		res := CheckEvents(model, events)
-		if res != correct {
-			b.Fatalf("expected output %t, got output %t", correct, res)
+	if partition {
+		model := kvNoPartitionModel
+		for i := 0; i < b.N; i++ {
+			res := CheckEvents(model, events)
+			if res != correct {
+				b.Fatalf("expected output %t, got output %t", correct, res)
+			}
+		}
+	} else {
+		model := kvModel
+		for i := 0; i < b.N; i++ {
+			res := CheckEvents(model, events)
+			if res != correct {
+				b.Fatalf("expected output %t, got output %t", correct, res)
+			}
 		}
 	}
 }
@@ -1475,13 +1465,9 @@ func TestSetModel(t *testing.T) {
 		unknown bool  // read
 	}
 
-	setModel := Model{
-		Init: func() interface{} { return []int{} },
-		Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
-			st := state.([]int)
-			inp := input.(setInput)
-			out := output.(setOutput)
-
+	setModel := Model[[]int, setInput, setOutput]{
+		Init: func() []int { return []int{} },
+		Step: func(st []int, inp setInput, out setOutput) (bool, []int) {
 			if inp.op == true {
 				// always returns true for write
 				index := sort.SearchInts(st, inp.value)
@@ -1496,7 +1482,7 @@ func TestSetModel(t *testing.T) {
 			sort.Ints(out.values)
 			return out.unknown || reflect.DeepEqual(st, out.values), out.values
 		},
-		Equal: func(state1, state2 interface{}) bool {
+		Equal: func(state1, state2 []int) bool {
 			return reflect.DeepEqual(state1, state2)
 		},
 	}
