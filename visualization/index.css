@@ -86,7 +86,7 @@ text {
 
 .tooltip {
   position: absolute;
-  opacity: 0;
+  display: none;
   border: 1px solid #ccc;
   background: white;
   border-radius: 4px;

@@ -482,7 +482,7 @@ function render(data) {
       const index = parseInt(this.dataset['index'])
       highlight(partition, index)
     }
-    tooltip.style.opacity = 1
+    tooltip.style.display = 'block'
   }
 
   function linearizationIndex(partition, index) {
@@ -595,7 +595,7 @@ function render(data) {
     if (!selected) {
       resetHighlight()
     }
-    tooltip.style.opacity = 0
+    tooltip.style.display = 'none'
     lastTooltip = [null, null, null, null, null]
   }
 
