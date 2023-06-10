@@ -235,7 +235,7 @@ this challenge in the context of a particular model and history.
 
 If you use Porcupine in any way in academic work, please cite the following:
 
-```
+```bibtex
 @misc{athalye2017porcupine,
   author = {Anish Athalye},
   title = {Porcupine: A fast linearizability checker in {Go}},
