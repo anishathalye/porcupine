@@ -57,7 +57,10 @@ text {
 
 .history-text {
   font-size: 0.9rem;
-  font-family: Menlo, Courier New, monospace;
+  font-family:
+    Menlo,
+    Courier New,
+    monospace;
 }
 
 .hidden {
