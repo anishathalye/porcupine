@@ -1,13 +1,13 @@
 package porcupine
 
 import (
-	"io/ioutil"
+	"os"
 	"reflect"
 	"testing"
 )
 
 func visualizeTempFile(t *testing.T, model Model, info linearizationInfo) {
-	file, err := ioutil.TempFile("", "*.html")
+	file, err := os.CreateTemp("", "*.html")
 	if err != nil {
 		t.Fatalf("failed to create temp file")
 	}
