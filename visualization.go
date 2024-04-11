@@ -31,7 +31,7 @@ type partitionVisualizationData struct {
 
 type visualizationData = []partitionVisualizationData
 
-func computeVisualizationData(model Model, info linearizationInfo) visualizationData {
+func computeVisualizationData(model Model, info LinearizationInfo) visualizationData {
 	model = fillDefault(model)
 	data := make(visualizationData, len(info.history))
 	for partition := 0; partition < len(info.history); partition++ {
@@ -94,12 +94,12 @@ func computeVisualizationData(model Model, info linearizationInfo) visualization
 // the history. If the history is not linearizable, the visualization shows
 // partial linearizations and illegal linearization points.
 //
-// To get the linearizationInfo that this function requires, you can use
+// To get the LinearizationInfo that this function requires, you can use
 // [CheckOperationsVerbose] / [CheckEventsVerbose].
 //
 // This function writes the visualization, an HTML file with embedded
 // JavaScript and data, to the given output.
-func Visualize(model Model, info linearizationInfo, output io.Writer) error {
+func Visualize(model Model, info LinearizationInfo, output io.Writer) error {
 	data := computeVisualizationData(model, info)
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -118,7 +118,7 @@ func Visualize(model Model, info linearizationInfo, output io.Writer) error {
 
 // VisualizePath is a wrapper around [Visualize] to write the visualization to
 // a file path.
-func VisualizePath(model Model, info linearizationInfo, path string) error {
+func VisualizePath(model Model, info LinearizationInfo, path string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
