@@ -36,7 +36,14 @@ text {
   stroke-width: 1;
 }
 
-.history-rect {
+.non-linearization-rect {
+  stroke: #888;
+  stroke-width: 1;
+  fill: #a4a4a4;
+}
+
+
+.linearization-rect {
   stroke: #888;
   stroke-width: 1;
   fill: #42d1f5;

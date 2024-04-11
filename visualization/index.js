@@ -329,6 +329,10 @@ function render(data) {
       const width = xPos[el['End']] - rx
       const x = rx + XOFF + PADDING
       const y = PADDING + el['ClientId'] * (BOX_HEIGHT + BOX_SPACE)
+      let rectClass = 'linearization-rect';
+      if (partition['PartialLinearizations'].length === 0) {
+        rectClass = 'non-linearization-rect'
+      }
       rects.push(
         svgadd(g, 'rect', {
           height: BOX_HEIGHT,
@@ -337,7 +341,7 @@ function render(data) {
           y: y,
           rx: HISTORY_RECT_RADIUS,
           ry: HISTORY_RECT_RADIUS,
-          class: 'history-rect',
+          class: rectClass,
         })
       )
       const text = svgadd(g, 'text', {

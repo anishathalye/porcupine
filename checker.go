@@ -26,6 +26,11 @@ type linearizationInfo struct {
 	partialLinearizations [][][]int // for each partition, a set of histories (list of ids)
 }
 
+func (info *linearizationInfo) AddOperations(operations []Operation) {
+	info.partialLinearizations = append(info.partialLinearizations, [][]int{})
+	info.history = append(info.history, makeEntries(operations))
+}
+
 type byTime []entry
 
 func (a byTime) Len() int {
