@@ -21,7 +21,7 @@ type entry struct {
 	clientId int
 }
 
-type linearizationInfo struct {
+type LinearizationInfo struct {
 	history               [][]entry // for each partition, a list of entries
 	partialLinearizations [][][]int // for each partition, a set of histories (list of ids)
 }
@@ -271,7 +271,7 @@ func fillDefault(model Model) Model {
 	return model
 }
 
-func checkParallel(model Model, history [][]entry, computeInfo bool, timeout time.Duration) (CheckResult, linearizationInfo) {
+func checkParallel(model Model, history [][]entry, computeInfo bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	ok := true
 	timedOut := false
 	results := make(chan bool, len(history))
@@ -308,7 +308,7 @@ loop:
 			break loop // if we time out, we might get a false positive
 		}
 	}
-	var info linearizationInfo
+	var info LinearizationInfo
 	if computeInfo {
 		// make sure we've waited for all goroutines to finish,
 		// otherwise we might race on access to longest[]
@@ -350,7 +350,7 @@ loop:
 	return result, info
 }
 
-func checkEvents(model Model, history []Event, verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
+func checkEvents(model Model, history []Event, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	model = fillDefault(model)
 	partitions := model.PartitionEvent(history)
 	l := make([][]entry, len(partitions))
@@ -360,7 +360,7 @@ func checkEvents(model Model, history []Event, verbose bool, timeout time.Durati
 	return checkParallel(model, l, verbose, timeout)
 }
 
-func checkOperations(model Model, history []Operation, verbose bool, timeout time.Duration) (CheckResult, linearizationInfo) {
+func checkOperations(model Model, history []Operation, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	model = fillDefault(model)
 	partitions := model.Partition(history)
 	l := make([][]entry, len(partitions))

@@ -20,8 +20,8 @@ func CheckOperationsTimeout(model Model, history []Operation, timeout time.Durat
 // CheckOperationsVerbose checks whether a history is linearizable while
 // computing data that can be used to visualize the history and linearization.
 //
-// The returned linearizationInfo can be used with [Visualize].
-func CheckOperationsVerbose(model Model, history []Operation, timeout time.Duration) (CheckResult, linearizationInfo) {
+// The returned LinearizationInfo can be used with [Visualize].
+func CheckOperationsVerbose(model Model, history []Operation, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	return checkOperations(model, history, true, timeout)
 }
 
@@ -42,7 +42,7 @@ func CheckEventsTimeout(model Model, history []Event, timeout time.Duration) Che
 // CheckEventsVerbose checks whether a history is linearizable while computing
 // data that can be used to visualize the history and linearization.
 //
-// The returned linearizationInfo can be used with [Visualize].
-func CheckEventsVerbose(model Model, history []Event, timeout time.Duration) (CheckResult, linearizationInfo) {
+// The returned LinearizationInfo can be used with [Visualize].
+func CheckEventsVerbose(model Model, history []Event, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	return checkEvents(model, history, true, timeout)
 }
