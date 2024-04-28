@@ -90,6 +90,8 @@ text {
 .tooltip {
   position: absolute;
   display: none;
+  width: max-content;
+  max-width: 300px;
   border: 1px solid #ccc;
   background: white;
   border-radius: 4px;
