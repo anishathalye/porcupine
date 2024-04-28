@@ -1,11 +1,11 @@
 # Porcupine [![Build Status](https://github.com/anishathalye/porcupine/workflows/CI/badge.svg)](https://github.com/anishathalye/porcupine/actions?query=workflow%3ACI) [![Go Reference](https://pkg.go.dev/badge/github.com/anishathalye/porcupine)](https://pkg.go.dev/github.com/anishathalye/porcupine)
 
-Porcupine is a fast linearizability checker for testing the correctness of
-distributed systems. It takes a sequential specification as executable Go code,
-along with a concurrent history, and it determines whether the history is
-linearizable with respect to the sequential specification. Porcupine also
-implements a visualizer for histories and linearization points.
-
+Porcupine is a fast linearizability checker [used](#users) in both academia and
+industry for testing the correctness of distributed systems. It takes a
+sequential specification as executable Go code, along with a concurrent
+history, and it determines whether the history is linearizable with respect to
+the sequential specification. Porcupine also implements a visualizer for
+histories and linearization points.
 
 <p align="center">
 <a href="https://anishathalye.github.io/porcupine/ex-2.html">
@@ -230,6 +230,21 @@ If Porcupine runs really slowly on your model/history, it may be inevitable,
 due to state space explosion. See [this
 issue](https://github.com/anishathalye/porcupine/issues/6) for a discussion of
 this challenge in the context of a particular model and history.
+
+## Users
+
+Porcupine is used in both academia and industry. It can be helpful to look at
+existing uses of Porcupine to learn how you can design a robust testing
+framework with linearizability checking at its core.
+
+- [etcd](https://github.com/etcd-io/etcd). etcd uses Porcupine's linearizability checker and visualizer in its [robustness tests](https://github.com/etcd-io/etcd/tree/main/tests/robustness) [[KubeCon 2023eu talk](https://www.youtube.com/watch?v=IIMs0EjQZHg)].
+- [PingCAP TiPocket](https://github.com/pingcap/tipocket). PingCAP uses Porcupine to test the [TiDB](https://www.pingcap.com/tidb/) distributed database.
+- [Amazon MemoryDB (SIGMOD'24)](https://www.amazon.science/publications/amazon-memorydb-a-fast-and-durable-memory-first-cloud-database). Amazon uses Porcupine to test MemoryDB consistency.
+- [LEGOStore (VLDB'22)](https://www.vldb.org/pvldb/vol15/p2201-zare.pdf). Porcupine is used to test the linearizability of LEGOStore.
+- [Resonate](https://github.com/resonatehq/durable-promise-test-harness). Resonate's test harness uses Porcupine as its linearizability checker.
+- [MIT 6.5840 (Distributed Systems) key-value store](https://pdos.csail.mit.edu/6.824/labs/lab-kvraft.html). Porcupine was originally developed for use in MIT's distributed systems class to test the linearizability of the Raft-based distributed key-value store.
+
+Does your system use Porcupine? Send a PR to add it to this list!
 
 ## Citation
 
