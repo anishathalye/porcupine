@@ -588,7 +588,11 @@ function render(data) {
       lastTooltip = thisTooltip
     }
     // make sure tooltip doesn't overflow off the right side of the screen
-    const maxX = document.documentElement.scrollLeft + document.documentElement.clientWidth - PADDING - tooltip.getBoundingClientRect().width
+    const maxX =
+      document.documentElement.scrollLeft +
+      document.documentElement.clientWidth -
+      PADDING -
+      tooltip.getBoundingClientRect().width
     tooltip.style.left = Math.min(event.pageX + 20, maxX) + 'px'
     tooltip.style.top = event.pageY + 20 + 'px'
   }
