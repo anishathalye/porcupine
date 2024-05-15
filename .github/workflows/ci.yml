@@ -55,4 +55,4 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Staticcheck
-        run: "staticcheck -f stylish *.go"
+        run: "staticcheck -f stylish ./..."
