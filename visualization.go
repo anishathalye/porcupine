@@ -9,11 +9,29 @@ import (
 	"sort"
 )
 
+type LinearizationInfo struct {
+	history               [][]entry // for each partition, a list of entries
+	partialLinearizations [][][]int // for each partition, a set of histories (list of ids)
+	annotations           []annotation
+}
+
 type historyElement struct {
 	ClientId    int
 	Start       int64
 	End         int64
 	Description string
+}
+
+type annotation struct {
+	ClientId        int
+	Tag             string
+	Start           int64
+	End             int64
+	Description     string
+	Details         string
+	Annotation      bool // always true
+	TextColor       string
+	BackgroundColor string
 }
 
 type linearizationStep struct {
@@ -29,11 +47,63 @@ type partitionVisualizationData struct {
 	Largest               map[int]int
 }
 
-type visualizationData = []partitionVisualizationData
+type visualizationData struct {
+	Partitions  []partitionVisualizationData
+	Annotations []annotation
+}
+
+// Annotations to add to histories.
+//
+// Either a ClientId or Tag must be supplied. The End is optional, for "point
+// in time" annotations. If the end is left unspecified, the framework
+// interprets it as Start. The text given in Description is shown in the main
+// visualization, and the text given in Details (optional) is shown in the
+// tooltip for the annotation. TextColor and BackgroundColor are both optional;
+// if specified, they should be valid CSS colors, e.g., "#efaefc".
+//
+// To attach annotations to a visualization, use
+// [LinearizationInfo.AddAnnotations].
+type Annotation struct {
+	ClientId        int
+	Tag             string
+	Start           int64
+	End             int64
+	Description     string
+	Details         string
+	TextColor       string
+	BackgroundColor string
+}
+
+// AddAnnotations adds extra annotations to a visualization.
+//
+// This can be used to add extra client operations  or it can be used to add
+// standalone annotations with arbitrary tags, e.g., associated with "servers"
+// rather than clients, or even a "test framework".
+//
+// See documentation on [Annotation] for what kind of annotations you can add.
+func (li *LinearizationInfo) AddAnnotations(annotations []Annotation) {
+	for _, elem := range annotations {
+		end := elem.End
+		if end < elem.Start {
+			end = elem.Start
+		}
+		li.annotations = append(li.annotations, annotation{
+			ClientId:        elem.ClientId,
+			Tag:             elem.Tag,
+			Start:           elem.Start,
+			End:             end,
+			Description:     elem.Description,
+			Details:         elem.Details,
+			Annotation:      true,
+			TextColor:       elem.TextColor,
+			BackgroundColor: elem.BackgroundColor,
+		})
+	}
+}
 
 func computeVisualizationData(model Model, info LinearizationInfo) visualizationData {
 	model = fillDefault(model)
-	data := make(visualizationData, len(info.history))
+	partitions := make([]partitionVisualizationData, len(info.history))
 	for partition := 0; partition < len(info.history); partition++ {
 		// history
 		n := len(info.history[partition]) / 2
@@ -51,6 +121,9 @@ func computeVisualizationData(model Model, info LinearizationInfo) visualization
 				history[elem.id].Description = model.DescribeOperation(callValue[elem.id], elem.value)
 				returnValue[elem.id] = elem.value
 			}
+			// historyElement.Annotation defaults to false, so we
+			// don't need to explicitly set it here; all of these
+			// are non-annotation elements
 		}
 		// partial linearizations
 		largestIndex := make(map[int]int)
@@ -78,12 +151,21 @@ func computeVisualizationData(model Model, info LinearizationInfo) visualization
 			}
 			linearizations[i] = linearization
 		}
-		data[partition] = partitionVisualizationData{
+		partitions[partition] = partitionVisualizationData{
 			History:               history,
 			PartialLinearizations: linearizations,
 			Largest:               largestIndex,
 		}
 	}
+	annotations := info.annotations
+	if annotations == nil {
+		annotations = make([]annotation, 0)
+	}
+	data := visualizationData{
+		Partitions:  partitions,
+		Annotations: annotations,
+	}
+
 	return data
 }
 

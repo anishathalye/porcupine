@@ -175,13 +175,13 @@ the case of a non-linearizable history). The result is an HTML page that draws
 an interactive visualization using JavaScript. The output looks like this:
 
 <p align="center">
-<a href="https://anishathalye.github.io/porcupine/demo.html">
-<img src="https://raw.githubusercontent.com/anishathalye/assets/master/porcupine/demo.png" width="735" alt="Visualization demo">
+<a href="https://anishathalye.github.io/porcupine/demo-annotations.html">
+<img src="https://raw.githubusercontent.com/anishathalye/assets/master/porcupine/demo-annotations.png" width="1021" alt="Visualization demo">
 </a>
 </p>
 
 You can see the full interactive version
-[here](https://anishathalye.github.io/porcupine/demo.html).
+[here](https://anishathalye.github.io/porcupine/demo-annotations.html).
 
 The visualization is by partition: all partitions are essentially independent,
 so with the key-value store example above, operations related to each unique
@@ -221,8 +221,14 @@ it's useful to fill out the `DescribeOperation` and `DescribeState` fields of
 the model. See [`visualization_test.go`](visualization_test.go) for an
 end-to-end example of how to visualize a history using Porcupine.
 
+You can also add custom annotations to visualizations, as shown in the example
+above. This can be helpful for attaching debugging information, e.g,. from
+servers or the test framework. You can do this using the
+[`AddAnnotations`][AddAnnotations] method.
+
 [CheckOperationsVerbose]: https://pkg.go.dev/github.com/anishathalye/porcupine#CheckOperationsVerbose
 [CheckEventsVerbose]: https://pkg.go.dev/github.com/anishathalye/porcupine#CheckEventsVerbose
+[AddAnnotations]: https://pkg.go.dev/github.com/anishathalye/porcupine#LinearizationInfo.AddAnnotations
 
 ## Notes
 

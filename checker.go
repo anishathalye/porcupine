@@ -21,11 +21,6 @@ type entry struct {
 	clientId int
 }
 
-type LinearizationInfo struct {
-	history               [][]entry // for each partition, a list of entries
-	partialLinearizations [][][]int // for each partition, a set of histories (list of ids)
-}
-
 type byTime []entry
 
 func (a byTime) Len() int {

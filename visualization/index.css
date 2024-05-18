@@ -42,6 +42,12 @@ text {
   fill: #42d1f5;
 }
 
+.client-annotation-rect {
+  stroke: #888;
+  stroke-width: 1;
+  fill: #e0e0e0;
+}
+
 .link {
   fill: #206475;
   cursor: pointer;
