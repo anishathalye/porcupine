@@ -60,7 +60,7 @@ func TestVisualizationMultipleLengths(t *testing.T) {
 		},
 		Largest: map[int]int{0: 0, 1: 0},
 	}}
-	if !reflect.DeepEqual(expected, data) {
+	if !reflect.DeepEqual(expected, data.Partitions) {
 		t.Fatalf("expected data to be \n%v\n, was \n%v", expected, data)
 	}
 	visualizeTempFile(t, kvModel, info)
@@ -126,4 +126,40 @@ func TestVisualizationLarge(t *testing.T) {
 	}
 
 	visualizeTempFile(t, etcdModel, info)
+}
+
+func TestVisualizationAnnotations(t *testing.T) {
+	// base set of operations same as TestVisualizationMultipleLengths
+	ops := []Operation{
+		{0, kvInput{op: 0, key: "x"}, 0, kvOutput{"w"}, 100},
+		{1, kvInput{op: 1, key: "x", value: "y"}, 5, kvOutput{}, 10},
+		{2, kvInput{op: 1, key: "x", value: "z"}, 0, kvOutput{}, 10},
+		{1, kvInput{op: 0, key: "x"}, 20, kvOutput{"y"}, 30},
+		{1, kvInput{op: 1, key: "x", value: "w"}, 35, kvOutput{}, 45},
+		{5, kvInput{op: 0, key: "x"}, 25, kvOutput{"z"}, 35},
+		{3, kvInput{op: 0, key: "x"}, 30, kvOutput{"y"}, 40},
+		{4, kvInput{op: 0, key: "y"}, 50, kvOutput{"a"}, 90},
+		{2, kvInput{op: 1, key: "y", value: "a"}, 55, kvOutput{}, 85},
+	}
+	res, info := CheckOperationsVerbose(kvModel, ops, 0)
+	annotations := []Annotation{
+		// let's say that there was a "failed get" by client 4 early on
+		{ClientId: 4, Start: 10, End: 31, Description: "get('y') timeout", BackgroundColor: "#ff9191"},
+		// and a failed get by client 5 later
+		{ClientId: 5, Start: 80, Description: "get('x') timeout", BackgroundColor: "#ff9191"},
+		// and some tagged annotations
+		{Tag: "Server 1", Start: 30, Description: "leader", Details: "became leader in term 3 with 2 votes"},
+		{Tag: "Server 3", Start: 10, Description: "duplicate", Details: "saw duplicate operation put('x', 'y')"},
+		{Tag: "Server 2", Start: 80, Description: "restart"},
+		{Tag: "Server 3", Start: 0, Description: "leader", Details: "became leader in term 1 with 3 votes"},
+		// and some "test framework" annotations
+		{Tag: "Test Framework", Start: 20, End: 35, Description: "partition [3] [1 2]", BackgroundColor: "#efaefc"},
+		{Tag: "Test Framework", Start: 40, End: 100, Description: "partition [2] [1 3]", BackgroundColor: "#efaefc"},
+	}
+	info.AddAnnotations(annotations)
+	if res != Illegal {
+		t.Fatalf("expected output %v, got output %v", Illegal, res)
+	}
+	// we don't check much else here, this has to be visually inspected
+	visualizeTempFile(t, kvModel, info)
 }
