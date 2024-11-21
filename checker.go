@@ -26,6 +26,76 @@ type LinearizationInfo struct {
 	partialLinearizations [][][]int // for each partition, a set of histories (list of ids)
 }
 
+// PartialLinearizations returns partial linearizations found during the
+// linearizability check, as sets of operation IDs.
+//
+// For each partition, it returns a set of possible linearization histories,
+// where each history is represented as a sequence of operation IDs. If the
+// history is linearizable, this will contain a complete linearization. If not
+// linearizable, it contains the maximal partial linearizations found.
+func (li *LinearizationInfo) PartialLinearizations() [][][]int {
+	return li.partialLinearizations
+}
+
+// PartialLinearizationsOperations returns partial linearizations found during
+// the linearizability check, as sets of sequences of [Operation].
+//
+// For each partition, it returns a set of possible linearization histories,
+// where each history is represented as a sequence of [Operation]. If the
+// history is linearizable, this will contain a complete linearization. If not
+// linearizable, it contains the maximal partial linearizations found.
+func (li *LinearizationInfo) PartialLinearizationsOperations() [][][]Operation {
+	result := make([][][]Operation, len(li.history))
+	for p, partition := range li.history {
+		// reconstruct operations based on entries
+		callMap := make(map[int]entry)
+		retMap := make(map[int]entry)
+		for _, e := range partition {
+			if e.kind == callEntry {
+				callMap[e.id] = e
+			} else {
+				retMap[e.id] = e
+			}
+		}
+
+		opMap := make(map[int]Operation)
+		for id, call := range callMap {
+			ret, ok := retMap[id]
+			if !ok {
+				// this should never happen, because the LinearizationInfo
+				// object should always contain valid partial linearizations,
+				// where there is a return for every call
+				panic("cannot find corresponding return for call")
+			}
+			opMap[id] = Operation{
+				ClientId: call.clientId,
+				Input:    call.value,
+				Call:     call.time,
+				Output:   ret.value,
+				Return:   ret.time,
+			}
+		}
+
+		partials := make([][]Operation, len(li.partialLinearizations[p]))
+		for i, linearization := range li.partialLinearizations[p] {
+			partials[i] = make([]Operation, len(linearization))
+			for j, id := range linearization {
+				op, exists := opMap[id]
+				if !exists {
+					// this should never happen, because the LinearizationInfo
+					// object should always contain valid partial
+					// linearizations, where every ID in the partial
+					// linearization is in the history
+					panic("cannot find operation for given id in linearization")
+				}
+				partials[i][j] = op
+			}
+		}
+		result[p] = partials
+	}
+	return result
+}
+
 type byTime []entry
 
 func (a byTime) Len() int {
