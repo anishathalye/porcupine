@@ -1,6 +1,9 @@
 package porcupine
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // An Operation is an element of a history.
 //
@@ -87,6 +90,133 @@ type Model struct {
 	// example, "{'x' -> 'y', 'z' -> 'w'}". Can be omitted if you're not
 	// producing visualizations.
 	DescribeState func(state interface{}) string
+}
+
+// A NondeterministicModel is a nondeterministic sequential specification of a
+// system.
+//
+// For basics on models, see the documentation for [Model].  In contrast to
+// Model, NondeterministicModel has a step function that returns a set of
+// states, indicating all possible next states. It can be converted to a Model
+// using the [NondeterministicModel.ToModel] function.
+//
+// It may be helpful to look at this package's [test code] for examples of how
+// to write and use nondeterministic models.
+//
+// [test code]: https://github.com/anishathalye/porcupine/blob/master/porcupine_test.go
+type NondeterministicModel struct {
+	// Partition functions, such that a history is linearizable if and only
+	// if each partition is linearizable. If left nil, this package will
+	// skip partitioning.
+	Partition      func(history []Operation) [][]Operation
+	PartitionEvent func(history []Event) [][]Event
+	// Initial states of the system.
+	Init func() []interface{}
+	// Step function for the system. Returns all possible next states for
+	// the given state, input, and output. If the system cannot step with
+	// the given state/input to produce the given output, this function
+	// should return an empty slice.
+	Step func(state interface{}, input interface{}, output interface{}) []interface{}
+	// Equality on states. If left nil, this package will use == as a
+	// fallback ([ShallowEqual]).
+	Equal func(state1, state2 interface{}) bool
+	// For visualization, describe an operation as a string. For example,
+	// "Get('x') -> 'y'". Can be omitted if you're not producing
+	// visualizations.
+	DescribeOperation func(input interface{}, output interface{}) string
+	// For visualization purposes, describe a state as a string. For
+	// example, "{'x' -> 'y', 'z' -> 'w'}". Can be omitted if you're not
+	// producing visualizations.
+	DescribeState func(state interface{}) string
+}
+
+func merge(states []interface{}, eq func(state1, state2 interface{}) bool) []interface{} {
+	var uniqueStates []interface{}
+	for _, state := range states {
+		unique := true
+		for _, us := range uniqueStates {
+			if eq(state, us) {
+				unique = false
+				break
+			}
+		}
+		if unique {
+			uniqueStates = append(uniqueStates, state)
+		}
+	}
+	return uniqueStates
+}
+
+// ToModel converts a [NondeterministicModel] to a [Model] using a power set
+// construction.
+//
+// This makes it suitable for use in linearizability checking operations like
+// [CheckOperations]. This is a general construction that can be used for any
+// nondeterministic model. It relies on the NondeterministicModel's Equal
+// function to merge states. You may be able to achieve better performance by
+// implementing a Model directly.
+func (nm *NondeterministicModel) ToModel() Model {
+	// like fillDefault
+	equal := nm.Equal
+	if equal == nil {
+		equal = shallowEqual
+	}
+	describeOperation := nm.DescribeOperation
+	if describeOperation == nil {
+		describeOperation = defaultDescribeOperation
+	}
+	describeState := nm.DescribeState
+	if describeState == nil {
+		describeState = defaultDescribeState
+	}
+	return Model{
+		Partition:      nm.Partition,
+		PartitionEvent: nm.PartitionEvent,
+		// we need this wrapper to convert a []interface{} to an interface{}
+		Init: func() interface{} {
+			return merge(nm.Init(), nm.Equal)
+		},
+		Step: func(state, input, output interface{}) (bool, interface{}) {
+			states := state.([]interface{})
+			var allNextStates []interface{}
+			for _, state := range states {
+				allNextStates = append(allNextStates, nm.Step(state, input, output)...)
+			}
+			uniqueNextStates := merge(allNextStates, equal)
+			return len(uniqueNextStates) > 0, uniqueNextStates
+		},
+		// this operates on sets of states that have been merged, so we
+		// don't need to check inclusion in both directions
+		Equal: func(state1, state2 interface{}) bool {
+			states1 := state1.([]interface{})
+			states2 := state2.([]interface{})
+			if len(states1) != len(states2) {
+				return false
+			}
+			for _, s1 := range states1 {
+				found := false
+				for _, s2 := range states2 {
+					if equal(s1, s2) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return false
+				}
+			}
+			return true
+		},
+		DescribeOperation: describeOperation,
+		DescribeState: func(state interface{}) string {
+			states := state.([]interface{})
+			var descriptions []string
+			for _, state := range states {
+				descriptions = append(descriptions, describeState(state))
+			}
+			return fmt.Sprintf("{%s}", strings.Join(descriptions, ", "))
+		},
+	}
 }
 
 // noPartition is a fallback partition function that partitions the history

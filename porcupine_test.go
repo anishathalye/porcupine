@@ -1553,3 +1553,145 @@ func TestSetModel(t *testing.T) {
 		t.Fatal("expected operations not to be linearizable")
 	}
 }
+
+// a specification for a nondeterministic register that supports a "put-any"
+// operation that writes some subset of the specified values to the register,
+// and a "get-any" operation that reads some subset of the values in the
+// register
+
+type nondeterministicRegisterState = []int
+
+type nondeterministicRegisterInput struct {
+	// put-any: op = 1
+	// get-any: op = 2
+	// get-all: op = 3
+	op    int
+	value []int
+}
+
+func subsets(v []int) []interface{} {
+	if len(v) == 0 {
+		return []interface{}{[]int{}}
+	}
+	ss := []interface{}{}
+	for _, subset := range subsets(v[1:]) {
+		ss = append(ss, subset)
+		ss = append(ss, append([]int{v[0]}, subset.([]int)...))
+	}
+	return ss
+}
+
+func setEqual(s1, s2 []int) bool {
+	for _, v1 := range s1 {
+		found := false
+		for _, v2 := range s2 {
+			if v1 == v2 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	for _, v2 := range s2 {
+		found := false
+		for _, v1 := range s1 {
+			if v1 == v2 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+var nondeterministicRegisterModel = NondeterministicModel{
+	Init: func() []interface{} {
+		states := []interface{}{nondeterministicRegisterState{}}
+		return states
+	},
+	Step: func(state interface{}, input interface{}, output interface{}) []interface{} {
+		st := state.(nondeterministicRegisterState)
+		inp := input.(nondeterministicRegisterInput)
+		out := output.([]int)
+		if inp.op == 1 {
+			return subsets(inp.value)
+		} else if inp.op == 2 {
+			isSubset := true
+			for _, val := range out {
+				found := false
+				for _, stVal := range st {
+					if val == stVal {
+						found = true
+						break
+					}
+				}
+				if !found {
+					isSubset = false
+					break
+				}
+			}
+			if isSubset {
+				return []interface{}{st}
+			}
+			return []interface{}{}
+		} else {
+			if setEqual(st, out) {
+				return []interface{}{st}
+			}
+			return []interface{}{}
+		}
+	},
+	Equal: func(state1, state2 interface{}) bool {
+		st1 := state1.(nondeterministicRegisterState)
+		st2 := state2.(nondeterministicRegisterState)
+		return setEqual(st1, st2)
+	},
+	// step function: takes a state, input, and output, and returns all possible next states
+	DescribeOperation: func(input, output interface{}) string {
+		inp := input.(nondeterministicRegisterInput)
+		switch inp.op {
+		case 1:
+			return fmt.Sprintf("put-any(%v)", inp.value)
+		case 2:
+			return fmt.Sprintf("get-any() -> %v", output.([]int))
+		case 3:
+			return fmt.Sprintf("get-all() -> %v", output.([]int))
+		}
+		return "<invalid>" // unreachable
+	},
+}
+
+func TestNondeterministicRegisterModel(t *testing.T) {
+	events := []Event{
+		// C0: PutAny({1, 2, 3, 4})
+		{Kind: CallEvent, Value: nondeterministicRegisterInput{1, []int{1, 2, 3, 4}}, Id: 0, ClientId: 0},
+		// C1: GetAny()
+		{Kind: CallEvent, Value: nondeterministicRegisterInput{2, nil}, Id: 1, ClientId: 1},
+		// C2: GetAny()
+		{Kind: CallEvent, Value: nondeterministicRegisterInput{2, nil}, Id: 2, ClientId: 2},
+		// C3: GetAll()
+		{Kind: CallEvent, Value: nondeterministicRegisterInput{3, nil}, Id: 3, ClientId: 3},
+		// C2: Completed GetAny -> {2}
+		{Kind: ReturnEvent, Value: []int{2}, Id: 2, ClientId: 2},
+		// C1: Completed GetAny -> {1, 4}
+		{Kind: ReturnEvent, Value: []int{1, 4}, Id: 1, ClientId: 1},
+		// C1: Completed GetAll -> {1, 2, 3}
+		{Kind: ReturnEvent, Value: []int{1, 2, 3}, Id: 3, ClientId: 3},
+		// C0: Completed PutAny
+		{Kind: ReturnEvent, Value: []int{}, Id: 0, ClientId: 0},
+	}
+
+	model := nondeterministicRegisterModel.ToModel()
+	res, info := CheckEventsVerbose(model, events, 0)
+
+	if res != Illegal {
+		t.Fatal("expected operations to not be linearizable")
+	}
+
+	visualizeTempFile(t, model, info)
+}
