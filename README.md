@@ -249,6 +249,7 @@ framework with linearizability checking at its core.
 - [LEGOStore (VLDB'22)](https://www.vldb.org/pvldb/vol15/p2201-zare.pdf). Porcupine is used to test the linearizability of LEGOStore.
 - [Resonate](https://github.com/resonatehq/durable-promise-test-harness). Resonate's test harness uses Porcupine as its linearizability checker.
 - [MIT 6.5840 (Distributed Systems) key-value store](https://pdos.csail.mit.edu/6.824/labs/lab-kvraft.html). Porcupine was originally developed for use in MIT's distributed systems class to test the linearizability of the Raft-based distributed key-value store.
+- [IIT Delhi COL733 (Cloud computing technology fundamentals) object store](https://github.com/codenet/col733-cloud/tree/main/labs/lab3). The testing harness uses Porcupine to test the linearizability of the strongly-consistent variant of [CRAQ](https://www.usenix.org/legacy/event/usenix09/tech/full_papers/terrace/terrace.pdf).
 
 Does your system use Porcupine? Send a PR to add it to this list!
 
