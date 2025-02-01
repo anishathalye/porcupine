@@ -1,4 +1,4 @@
-# Porcupine [![Build Status](https://github.com/anishathalye/porcupine/workflows/CI/badge.svg)](https://github.com/anishathalye/porcupine/actions?query=workflow%3ACI) [![Go Reference](https://pkg.go.dev/badge/github.com/anishathalye/porcupine)](https://pkg.go.dev/github.com/anishathalye/porcupine)
+# Porcupine [![Build Status](https://github.com/anishathalye/porcupine/actions/workflows/ci.yml/badge.svg)](https://github.com/anishathalye/porcupine/actions/workflows/ci.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/anishathalye/porcupine)](https://pkg.go.dev/github.com/anishathalye/porcupine)
 
 Porcupine is a fast linearizability checker [used](#users) in both academia and
 industry for testing the correctness of distributed systems. It takes a
