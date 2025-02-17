@@ -1695,3 +1695,11 @@ func TestNondeterministicRegisterModel(t *testing.T) {
 
 	visualizeTempFile(t, model, info)
 }
+
+func TestCheckNoPartitions(t *testing.T) {
+	ops := []Operation{}
+	res, _ := CheckOperationsVerbose(kvModel, ops, 0)
+	if res != Ok {
+		t.Fatalf("expected output %v, got output %v", Ok, res)
+	}
+}

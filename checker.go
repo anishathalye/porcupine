@@ -343,6 +343,9 @@ func fillDefault(model Model) Model {
 }
 
 func checkParallel(model Model, history [][]entry, computeInfo bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
+	if len(history) == 0 {
+		return Ok, LinearizationInfo{}
+	}
 	ok := true
 	timedOut := false
 	results := make(chan bool, len(history))
