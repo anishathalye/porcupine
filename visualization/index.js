@@ -140,6 +140,12 @@ function render(data) {
           const tweaked = (end + nextTs[end]) / 2
           el['End'] = tweaked
           allTimestamps.add(tweaked)
+        } else {
+          // For point-in-time annotations at the end of the timeline,
+          // there is no next timestamp, so we instead add a small epsilon (of 1)
+          const tweaked = end + 1
+          el['End'] = tweaked
+          allTimestamps.add(tweaked)
         }
       }
     })

@@ -163,3 +163,23 @@ func TestVisualizationAnnotations(t *testing.T) {
 	// we don't check much else here, this has to be visually inspected
 	visualizeTempFile(t, kvModel, info)
 }
+
+func TestVisualizePointInTimeAnnotationsEnd(t *testing.T) {
+	ops := []Operation{
+		{0, kvInput{op: 0, key: "x"}, 0, kvOutput{"w"}, 100},
+		{1, kvInput{op: 1, key: "x", value: "y"}, 50, kvOutput{}, 60},
+	}
+	res, info := CheckOperationsVerbose(kvModel, ops, 0)
+	if res != Illegal {
+		t.Fatalf("expected output %v, got output %v", Illegal, res)
+	}
+	annotations := []Annotation{
+		{Tag: "Server 1", Start: 30, Description: "leader change", Details: "became leader"},
+		{Tag: "Server 2", Start: 50, Description: "heartbeat"},
+		// point-in-time annotation at the end
+		{Tag: "Server 1", Start: 100, Description: "shutdown"},
+		{Tag: "Test Framework", Start: 20, End: 40, Description: "network stable", BackgroundColor: "#efaefc"},
+	}
+	info.AddAnnotations(annotations)
+	visualizeTempFile(t, kvModel, info)
+}
