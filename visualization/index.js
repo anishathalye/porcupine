@@ -178,10 +178,10 @@ function render(data) {
   // annotations goes in the opposite direction as that for events).
   allData[allData.length - 1]['History'].forEach((el) => {
     if (el['End'] === el['Start']) {
-      // point-in-time annotation
-      el['Start'] -= epsilon / 4
+      // point-in-time annotation: we adjust these to have a non-zero-duration;
+      // we only need to edit the end timestamp, and we can leave the start
+      // as-is
       el['End'] += epsilon / 4
-      allTimestamps.add(el['Start'])
       allTimestamps.add(el['End'])
     } else {
       // annotation touching another event or annotation
