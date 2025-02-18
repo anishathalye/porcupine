@@ -106,12 +106,14 @@ function render(data) {
   // - Create a set of all start timestamps
   const allTimestamps = new Set()
   const startTimestamps = new Set()
+  const endTimestamps = new Set()
   let gid = 0
   const byGid = {}
   allData.forEach((partition) => {
     partition['History'].forEach((el) => {
       allTimestamps.add(el['Start'])
       startTimestamps.add(el['Start'])
+      endTimestamps.add(el['End'])
       allTimestamps.add(el['End'])
       // give elements GIDs
       el['Gid'] = gid
@@ -121,35 +123,79 @@ function render(data) {
   })
   let sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b)
 
-  // This should not happen with "real" histories, but for certain edge
-  // cases, we need to deal with having multiple events share a start/end
-  // time. We solve this by tweaking the events that share the end time,
-  // updating the time to end+epsilon. In practice, rather than having to
-  // choose an epsilon, we choose to average the value with the next largest
-  // timestamp.
-  const nextTs = {}
+  // If one event has the same end time as another's start time, that means that
+  // they are concurrent, and we need to display them with overlap. We do this
+  // by tweaking the events that share the end time, updating the time to
+  // end+epsilon, so we have overlap.
+  //
+  // We do not render a good visualization in the situation where a single
+  // client has two events where one has an end time that matches the other's
+  // start time.  There isn't an easy way to handle this, because these two
+  // operations are concurrent (see the comment in model.go for more details for
+  // why it must be this way), and we can't display them with overlap on the
+  // same row cleanly.
+  let minDelta = Infinity
   for (let i = 0; i < sortedTimestamps.length - 1; i++) {
-    nextTs[sortedTimestamps[i]] = sortedTimestamps[i + 1]
+    const delta = sortedTimestamps[i + 1] - sortedTimestamps[i]
+    if (delta < minDelta) {
+      minDelta = delta
+    }
   }
-  allData.forEach((partition) => {
+  const epsilon = minDelta / 3
+  // safe to adjust a timestamp by += epsilon without it overlapping with
+  // another adjusted timestamp
+  allData.forEach((partition, index) => {
+    if (index === allData.length - 1) {
+      return // last partition is the annotations
+    }
     partition['History'].forEach((el) => {
       let end = el['End']
       el['OriginalEnd'] = end // for display purposes
       if (startTimestamps.has(end)) {
-        if (Object.prototype.hasOwnProperty.call(nextTs, end)) {
-          const tweaked = (end + nextTs[end]) / 2
-          el['End'] = tweaked
-          allTimestamps.add(tweaked)
-        } else {
-          // For point-in-time annotations at the end of the timeline,
-          // there is no next timestamp, so we instead add a small epsilon (of 1)
-          const tweaked = end + 1
-          el['End'] = tweaked
-          allTimestamps.add(tweaked)
-        }
+        el['End'] = end + epsilon
+        allTimestamps.add(el['End'])
       }
     })
   })
+
+  // Handle display of (1) annotations where one has the same end time as
+  // another's start time, and (2) point-in-time annotations, on the same row.
+  //
+  // Unlike operations, where we interpret the start and end times as a closed
+  // interval (and where they have to be displayed with overlap, to be able to
+  // render linearizations and partial linearizations correctly), annotations
+  // are for display purposes only and we can interpret annotations with
+  // different start/end times as open intervals, and render two annotations
+  // with times (a, b) and (b, c) without overlap. We can also handle the
+  // situation where we have a point-in-time annotation with times (b, b).
+  //
+  // This code currently does not handle the case where we have two
+  // point-in-time annotations with the same tag at the same timestamp.
+  //
+  // We keep the annotation adjustment epsilon even smaller (dividing by 2), so
+  // adjusting an event's end time forward by epsilon doesn't overlap with an
+  // annotation's start time that's adjusted forwards (the adjustment of
+  // annotations goes in the opposite direction as that for events).
+  allData[allData.length - 1]['History'].forEach((el) => {
+    if (el['End'] === el['Start']) {
+      // point-in-time annotation
+      el['Start'] -= epsilon / 4
+      el['End'] += epsilon / 4
+      allTimestamps.add(el['Start'])
+      allTimestamps.add(el['End'])
+    } else {
+      // annotation touching another event or annotation
+      if (startTimestamps.has(el['End'])) {
+        el['End'] -= epsilon / 2
+        allTimestamps.add(el['End'])
+      }
+      if (endTimestamps.has(el['Start'])) {
+        el['Start'] += epsilon / 2
+        allTimestamps.add(el['Start'])
+      }
+    }
+  })
+
   // Update sortedTimestamps, because we created some new timestamps.
   sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b)
 

@@ -183,3 +183,21 @@ func TestVisualizePointInTimeAnnotationsEnd(t *testing.T) {
 	info.AddAnnotations(annotations)
 	visualizeTempFile(t, kvModel, info)
 }
+
+func TestVisualizeMatchingStartEnd(t *testing.T) {
+	ops := []Operation{
+		{0, kvInput{op: 0, key: "x"}, 0, kvOutput{"w"}, 50},
+		{1, kvInput{op: 1, key: "x", value: "y"}, 50, kvOutput{}, 80},
+	}
+	res, info := CheckOperationsVerbose(kvModel, ops, 0)
+	if res != Illegal {
+		t.Fatalf("expected output %v, got output %v", Illegal, res)
+	}
+	annotations := []Annotation{
+		{Tag: "Test Framework", Start: 0, End: 20, Description: "partition"},
+		{Tag: "Test Framework", Start: 20, End: 20, Description: "point in time 1"},
+		{Tag: "Test Framework", Start: 20, End: 40, Description: "network stable"},
+	}
+	info.AddAnnotations(annotations)
+	visualizeTempFile(t, kvModel, info)
+}
