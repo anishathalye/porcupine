@@ -24,7 +24,7 @@ type entry struct {
 type LinearizationInfo struct {
 	history               [][]entry // for each partition, a list of entries
 	partialLinearizations [][][]int // for each partition, a set of histories (list of ids)
-	annotations           []annotation
+	annotations           []Annotation
 }
 
 // PartialLinearizations returns partial linearizations found during the

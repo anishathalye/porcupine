@@ -37,13 +37,13 @@ func TestVisualizationMultipleLengths(t *testing.T) {
 	data := computeVisualizationData(kvModel, info)
 	expected := []partitionVisualizationData{{
 		History: []historyElement{
-			{ClientId: 0, Start: 0, End: 100, Description: "get('x') -> 'w'"},
-			{ClientId: 1, Start: 5, End: 10, Description: "put('x', 'y')"},
-			{ClientId: 2, Start: 0, End: 10, Description: "put('x', 'z')"},
-			{ClientId: 1, Start: 20, End: 30, Description: "get('x') -> 'y'"},
-			{ClientId: 1, Start: 35, End: 45, Description: "put('x', 'w')"},
-			{ClientId: 5, Start: 25, End: 35, Description: "get('x') -> 'z'"},
-			{ClientId: 3, Start: 30, End: 40, Description: "get('x') -> 'y'"},
+			{ClientId: 0, Start: 0, OriginalStart: "0", End: 1300, OriginalEnd: "100", Description: "get('x') -> 'w'"},
+			{ClientId: 1, Start: 100, OriginalStart: "5", End: 200, OriginalEnd: "10", Description: "put('x', 'y')"},
+			{ClientId: 2, Start: 0, OriginalStart: "0", End: 200, OriginalEnd: "10", Description: "put('x', 'z')"},
+			{ClientId: 1, Start: 300, OriginalStart: "20", End: 500, OriginalEnd: "30", Description: "get('x') -> 'y'"},
+			{ClientId: 1, Start: 600, OriginalStart: "35", End: 800, OriginalEnd: "45", Description: "put('x', 'w')"},
+			{ClientId: 5, Start: 400, OriginalStart: "25", End: 600, OriginalEnd: "35", Description: "get('x') -> 'z'"},
+			{ClientId: 3, Start: 500, OriginalStart: "30", End: 700, OriginalEnd: "40", Description: "get('x') -> 'y'"},
 		},
 		PartialLinearizations: []partialLinearization{
 			{{2, "z"}, {1, "y"}, {3, "y"}, {6, "y"}, {4, "w"}, {0, "w"}},
@@ -52,8 +52,8 @@ func TestVisualizationMultipleLengths(t *testing.T) {
 		Largest: map[int]int{0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 1, 6: 0},
 	}, {
 		History: []historyElement{
-			{ClientId: 4, Start: 50, End: 90, Description: "get('y') -> 'a'"},
-			{ClientId: 2, Start: 55, End: 85, Description: "put('y', 'a')"},
+			{ClientId: 4, Start: 900, OriginalStart: "50", End: 1200, OriginalEnd: "90", Description: "get('y') -> 'a'"},
+			{ClientId: 2, Start: 1000, OriginalStart: "55", End: 1100, OriginalEnd: "85", Description: "put('y', 'a')"},
 		},
 		PartialLinearizations: []partialLinearization{
 			{{1, "a"}, {0, "a"}},
@@ -197,6 +197,17 @@ func TestVisualizeMatchingStartEnd(t *testing.T) {
 		{Tag: "Test Framework", Start: 0, End: 20, Description: "partition"},
 		{Tag: "Test Framework", Start: 20, End: 20, Description: "point in time 1"},
 		{Tag: "Test Framework", Start: 20, End: 40, Description: "network stable"},
+	}
+	info.AddAnnotations(annotations)
+	visualizeTempFile(t, kvModel, info)
+}
+
+func TestVisualizeAnnotationsNoEvents(t *testing.T) {
+	var info LinearizationInfo
+	annotations := []Annotation{
+		{Tag: "$ Test Info", Start: 1739938076171778000, End: 1739938076171778000, Description: "TestPersist33C (3 servers)"},
+		{Tag: "$ Checker", Start: 1739938076171786000, End: 1739938086186709000, Description: "agreement of 101 failed"},
+		{Tag: "$ Test Info", Start: 1739938086187103000, End: 1739938086187104000, Description: "test failed"},
 	}
 	info.AddAnnotations(annotations)
 	visualizeTempFile(t, kvModel, info)

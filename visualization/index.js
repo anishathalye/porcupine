@@ -134,23 +134,16 @@ function render(data) {
   // operations are concurrent (see the comment in model.go for more details for
   // why it must be this way), and we can't display them with overlap on the
   // same row cleanly.
-  let minDelta = Infinity
-  for (let i = 0; i < sortedTimestamps.length - 1; i++) {
-    const delta = sortedTimestamps[i + 1] - sortedTimestamps[i]
-    if (delta < minDelta) {
-      minDelta = delta
-    }
-  }
-  const epsilon = minDelta / 3
-  // safe to adjust a timestamp by += epsilon without it overlapping with
-  // another adjusted timestamp
+  const epsilon = 16
+  // coordinated with computeVisualizationData, which uses an incrementing
+  // counter multiplied by 100, so it's safe to adjust timestamps by += epsilon
+  // without it overlapping with another adjusted timestamp (2*16 < 100)
   allData.forEach((partition, index) => {
     if (index === allData.length - 1) {
       return // last partition is the annotations
     }
     partition['History'].forEach((el) => {
       let end = el['End']
-      el['OriginalEnd'] = end // for display purposes
       if (startTimestamps.has(end)) {
         el['End'] = end + epsilon
         allTimestamps.add(el['End'])
@@ -680,7 +673,7 @@ function render(data) {
             break
           }
         }
-        let call = allData[partition]['History'][index]['Start']
+        let call = allData[partition]['History'][index]['OriginalStart']
         let ret = allData[partition]['History'][index]['OriginalEnd']
         let msg = ''
         if (found) {

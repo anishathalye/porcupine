@@ -10,17 +10,19 @@ import (
 )
 
 type historyElement struct {
-	ClientId    int
-	Start       int64
-	End         int64
-	Description string
+	ClientId      int
+	Start         int
+	OriginalStart string
+	End           int
+	OriginalEnd   string
+	Description   string
 }
 
 type annotation struct {
 	ClientId        int
 	Tag             string
-	Start           int64
-	End             int64
+	Start           int
+	End             int
 	Description     string
 	Details         string
 	Annotation      bool // always true
@@ -81,21 +83,59 @@ func (li *LinearizationInfo) AddAnnotations(annotations []Annotation) {
 		if end < elem.Start {
 			end = elem.Start
 		}
-		li.annotations = append(li.annotations, annotation{
+		li.annotations = append(li.annotations, Annotation{
 			ClientId:        elem.ClientId,
 			Tag:             elem.Tag,
 			Start:           elem.Start,
 			End:             end,
 			Description:     elem.Description,
 			Details:         elem.Details,
-			Annotation:      true,
 			TextColor:       elem.TextColor,
 			BackgroundColor: elem.BackgroundColor,
 		})
 	}
 }
 
+// timestampMapping applies a monotonic map to compress timestamps.
+//
+// This function applies a monotonic map to timestamps so that the encoding of
+// timestamps in JSON keeps integers smaller than Number.MAX_SAFE_INTEGER.
+// Additionally, this function ensures that the minimum delta between any two
+// timestamps is at least 100, to coordinate with index.js, where it is
+// convenient to be able to adjust timestamps by an epsilon value (epsilon = 16)
+// without them overlapping with other adjusted timestamps.
+func timestampMapping(info LinearizationInfo) map[int64]int {
+	// find all timestamps
+	allTimestamps := make(map[int64]struct{})
+	for _, partition := range info.history {
+		for _, elem := range partition {
+			allTimestamps[elem.time] = struct{}{}
+		}
+	}
+	for _, elem := range info.annotations {
+		allTimestamps[elem.Start] = struct{}{}
+		allTimestamps[elem.End] = struct{}{}
+	}
+
+	// sort
+	timestamps := make([]int64, 0, len(allTimestamps))
+	for ts := range allTimestamps {
+		timestamps = append(timestamps, ts)
+	}
+	sort.Slice(timestamps, func(i, j int) bool {
+		return timestamps[i] < timestamps[j]
+	})
+
+	// construct mapping
+	mapping := make(map[int64]int)
+	for i, ts := range timestamps {
+		mapping[ts] = i * 100 // ensure minimum delta of 100 between timestamps
+	}
+	return mapping
+}
+
 func computeVisualizationData(model Model, info LinearizationInfo) visualizationData {
+	timeMap := timestampMapping(info)
 	model = fillDefault(model)
 	partitions := make([]partitionVisualizationData, len(info.history))
 	for partition := 0; partition < len(info.history); partition++ {
@@ -108,10 +148,12 @@ func computeVisualizationData(model Model, info LinearizationInfo) visualization
 			switch elem.kind {
 			case callEntry:
 				history[elem.id].ClientId = elem.clientId
-				history[elem.id].Start = elem.time
+				history[elem.id].Start = timeMap[elem.time]
+				history[elem.id].OriginalStart = fmt.Sprintf("%d", elem.time)
 				callValue[elem.id] = elem.value
 			case returnEntry:
-				history[elem.id].End = elem.time
+				history[elem.id].End = timeMap[elem.time]
+				history[elem.id].OriginalEnd = fmt.Sprintf("%d", elem.time)
 				history[elem.id].Description = model.DescribeOperation(callValue[elem.id], elem.value)
 				returnValue[elem.id] = elem.value
 			}
@@ -151,9 +193,19 @@ func computeVisualizationData(model Model, info LinearizationInfo) visualization
 			Largest:               largestIndex,
 		}
 	}
-	annotations := info.annotations
-	if annotations == nil {
-		annotations = make([]annotation, 0)
+	annotations := make([]annotation, len(info.annotations))
+	for i, elem := range info.annotations {
+		annotations[i] = annotation{
+			ClientId:        elem.ClientId,
+			Tag:             elem.Tag,
+			Start:           timeMap[elem.Start],
+			End:             timeMap[elem.End],
+			Description:     elem.Description,
+			Details:         elem.Details,
+			Annotation:      true,
+			TextColor:       elem.TextColor,
+			BackgroundColor: elem.BackgroundColor,
+		}
 	}
 	data := visualizationData{
 		Partitions:  partitions,
