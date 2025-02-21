@@ -1,6 +1,7 @@
 <!doctype html>
 <html>
   <head>
+    <meta charset="UTF-8" />
     <title>Porcupine</title>
     <style>
       html {
@@ -242,12 +243,14 @@ function render(data) {
   // - Create a set of all start timestamps
   const allTimestamps = new Set()
   const startTimestamps = new Set()
+  const endTimestamps = new Set()
   let gid = 0
   const byGid = {}
   allData.forEach((partition) => {
     partition['History'].forEach((el) => {
       allTimestamps.add(el['Start'])
       startTimestamps.add(el['Start'])
+      endTimestamps.add(el['End'])
       allTimestamps.add(el['End'])
       // give elements GIDs
       el['Gid'] = gid
@@ -257,29 +260,72 @@ function render(data) {
   })
   let sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b)
 
-  // This should not happen with "real" histories, but for certain edge
-  // cases, we need to deal with having multiple events share a start/end
-  // time. We solve this by tweaking the events that share the end time,
-  // updating the time to end+epsilon. In practice, rather than having to
-  // choose an epsilon, we choose to average the value with the next largest
-  // timestamp.
-  const nextTs = {}
-  for (let i = 0; i < sortedTimestamps.length - 1; i++) {
-    nextTs[sortedTimestamps[i]] = sortedTimestamps[i + 1]
-  }
-  allData.forEach((partition) => {
+  // If one event has the same end time as another's start time, that means that
+  // they are concurrent, and we need to display them with overlap. We do this
+  // by tweaking the events that share the end time, updating the time to
+  // end+epsilon, so we have overlap.
+  //
+  // We do not render a good visualization in the situation where a single
+  // client has two events where one has an end time that matches the other's
+  // start time.  There isn't an easy way to handle this, because these two
+  // operations are concurrent (see the comment in model.go for more details for
+  // why it must be this way), and we can't display them with overlap on the
+  // same row cleanly.
+  const epsilon = 16
+  // coordinated with computeVisualizationData, which uses an incrementing
+  // counter multiplied by 100, so it's safe to adjust timestamps by += epsilon
+  // without it overlapping with another adjusted timestamp (2*16 < 100)
+  allData.forEach((partition, index) => {
+    if (index === allData.length - 1) {
+      return // last partition is the annotations
+    }
     partition['History'].forEach((el) => {
       let end = el['End']
-      el['OriginalEnd'] = end // for display purposes
       if (startTimestamps.has(end)) {
-        if (Object.prototype.hasOwnProperty.call(nextTs, end)) {
-          const tweaked = (end + nextTs[end]) / 2
-          el['End'] = tweaked
-          allTimestamps.add(tweaked)
-        }
+        el['End'] = end + epsilon
+        allTimestamps.add(el['End'])
       }
     })
   })
+
+  // Handle display of (1) annotations where one has the same end time as
+  // another's start time, and (2) point-in-time annotations, on the same row.
+  //
+  // Unlike operations, where we interpret the start and end times as a closed
+  // interval (and where they have to be displayed with overlap, to be able to
+  // render linearizations and partial linearizations correctly), annotations
+  // are for display purposes only and we can interpret annotations with
+  // different start/end times as open intervals, and render two annotations
+  // with times (a, b) and (b, c) without overlap. We can also handle the
+  // situation where we have a point-in-time annotation with times (b, b).
+  //
+  // This code currently does not handle the case where we have two
+  // point-in-time annotations with the same tag at the same timestamp.
+  //
+  // We keep the annotation adjustment epsilon even smaller (dividing by 2), so
+  // adjusting an event's end time forward by epsilon doesn't overlap with an
+  // annotation's start time that's adjusted forwards (the adjustment of
+  // annotations goes in the opposite direction as that for events).
+  allData[allData.length - 1]['History'].forEach((el) => {
+    if (el['End'] === el['Start']) {
+      // point-in-time annotation: we adjust these to have a non-zero-duration;
+      // we only need to edit the end timestamp, and we can leave the start
+      // as-is
+      el['End'] += epsilon / 4
+      allTimestamps.add(el['End'])
+    } else {
+      // annotation touching another event or annotation
+      if (startTimestamps.has(el['End'])) {
+        el['End'] -= epsilon / 2
+        allTimestamps.add(el['End'])
+      }
+      if (endTimestamps.has(el['Start'])) {
+        el['Start'] += epsilon / 2
+        allTimestamps.add(el['Start'])
+      }
+    }
+  })
+
   // Update sortedTimestamps, because we created some new timestamps.
   sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b)
 
@@ -764,7 +810,7 @@ function render(data) {
             break
           }
         }
-        let call = allData[partition]['History'][index]['Start']
+        let call = allData[partition]['History'][index]['OriginalStart']
         let ret = allData[partition]['History'][index]['OriginalEnd']
         let msg = ''
         if (found) {
@@ -891,7 +937,7 @@ function render(data) {
 }
 
 
-      const data = {"Partitions":[{"History":[{"ClientId":0,"Start":0,"End":100,"Description":"get('x') -\u003e 'w'"},{"ClientId":1,"Start":5,"End":10,"Description":"put('x', 'y')"},{"ClientId":2,"Start":0,"End":10,"Description":"put('x', 'z')"},{"ClientId":1,"Start":20,"End":30,"Description":"get('x') -\u003e 'y'"},{"ClientId":1,"Start":35,"End":45,"Description":"put('x', 'w')"},{"ClientId":5,"Start":25,"End":35,"Description":"get('x') -\u003e 'z'"},{"ClientId":3,"Start":30,"End":40,"Description":"get('x') -\u003e 'y'"}],"PartialLinearizations":[[{"Index":2,"StateDescription":"z"},{"Index":1,"StateDescription":"y"},{"Index":3,"StateDescription":"y"},{"Index":6,"StateDescription":"y"},{"Index":4,"StateDescription":"w"},{"Index":0,"StateDescription":"w"}],[{"Index":1,"StateDescription":"y"},{"Index":2,"StateDescription":"z"},{"Index":5,"StateDescription":"z"}]],"Largest":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":1,"6":0}},{"History":[{"ClientId":4,"Start":50,"End":90,"Description":"get('y') -\u003e 'a'"},{"ClientId":2,"Start":55,"End":85,"Description":"put('y', 'a')"}],"PartialLinearizations":[[{"Index":1,"StateDescription":"a"},{"Index":0,"StateDescription":"a"}]],"Largest":{"0":0,"1":0}}],"Annotations":[{"ClientId":4,"Tag":"","Start":10,"End":31,"Description":"get('y') timeout","Details":"","Annotation":true,"TextColor":"","BackgroundColor":"#ff9191"},{"ClientId":5,"Tag":"","Start":80,"End":80,"Description":"get('x') timeout","Details":"","Annotation":true,"TextColor":"","BackgroundColor":"#ff9191"},{"ClientId":0,"Tag":"Server 1","Start":30,"End":30,"Description":"leader","Details":"became leader in term 3 with 2 votes","Annotation":true,"TextColor":"","BackgroundColor":""},{"ClientId":0,"Tag":"Server 3","Start":10,"End":10,"Description":"duplicate","Details":"saw duplicate operation put('x', 'y')","Annotation":true,"TextColor":"","BackgroundColor":""},{"ClientId":0,"Tag":"Server 2","Start":80,"End":80,"Description":"restart","Details":"","Annotation":true,"TextColor":"","BackgroundColor":""},{"ClientId":0,"Tag":"Server 3","Start":0,"End":0,"Description":"leader","Details":"became leader in term 1 with 3 votes","Annotation":true,"TextColor":"","BackgroundColor":""},{"ClientId":0,"Tag":"Test Framework","Start":20,"End":35,"Description":"partition [3] [1 2]","Details":"","Annotation":true,"TextColor":"","BackgroundColor":"#efaefc"},{"ClientId":0,"Tag":"Test Framework","Start":40,"End":100,"Description":"partition [2] [1 3]","Details":"","Annotation":true,"TextColor":"","BackgroundColor":"#efaefc"}]}
+      const data = {"Partitions":[{"History":[{"ClientId":0,"Start":0,"OriginalStart":"0","End":1500,"OriginalEnd":"100","Description":"get('x') -\u003e 'w'"},{"ClientId":1,"Start":100,"OriginalStart":"5","End":200,"OriginalEnd":"10","Description":"put('x', 'y')"},{"ClientId":2,"Start":0,"OriginalStart":"0","End":200,"OriginalEnd":"10","Description":"put('x', 'z')"},{"ClientId":1,"Start":300,"OriginalStart":"20","End":500,"OriginalEnd":"30","Description":"get('x') -\u003e 'y'"},{"ClientId":1,"Start":700,"OriginalStart":"35","End":900,"OriginalEnd":"45","Description":"put('x', 'w')"},{"ClientId":5,"Start":400,"OriginalStart":"25","End":700,"OriginalEnd":"35","Description":"get('x') -\u003e 'z'"},{"ClientId":3,"Start":500,"OriginalStart":"30","End":800,"OriginalEnd":"40","Description":"get('x') -\u003e 'y'"}],"PartialLinearizations":[[{"Index":2,"StateDescription":"z"},{"Index":1,"StateDescription":"y"},{"Index":3,"StateDescription":"y"},{"Index":6,"StateDescription":"y"},{"Index":4,"StateDescription":"w"},{"Index":0,"StateDescription":"w"}],[{"Index":1,"StateDescription":"y"},{"Index":2,"StateDescription":"z"},{"Index":5,"StateDescription":"z"}]],"Largest":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":1,"6":0}},{"History":[{"ClientId":4,"Start":1000,"OriginalStart":"50","End":1400,"OriginalEnd":"90","Description":"get('y') -\u003e 'a'"},{"ClientId":2,"Start":1100,"OriginalStart":"55","End":1300,"OriginalEnd":"85","Description":"put('y', 'a')"}],"PartialLinearizations":[[{"Index":1,"StateDescription":"a"},{"Index":0,"StateDescription":"a"}]],"Largest":{"0":0,"1":0}}],"Annotations":[{"ClientId":4,"Tag":"","Start":200,"End":600,"Description":"get('y') timeout","Details":"","Annotation":true,"TextColor":"","BackgroundColor":"#ff9191"},{"ClientId":5,"Tag":"","Start":1200,"End":1200,"Description":"get('x') timeout","Details":"","Annotation":true,"TextColor":"","BackgroundColor":"#ff9191"},{"ClientId":0,"Tag":"Server 1","Start":500,"End":500,"Description":"leader","Details":"became leader in term 3 with 2 votes","Annotation":true,"TextColor":"","BackgroundColor":""},{"ClientId":0,"Tag":"Server 3","Start":200,"End":200,"Description":"duplicate","Details":"saw duplicate operation put('x', 'y')","Annotation":true,"TextColor":"","BackgroundColor":""},{"ClientId":0,"Tag":"Server 2","Start":1200,"End":1200,"Description":"restart","Details":"","Annotation":true,"TextColor":"","BackgroundColor":""},{"ClientId":0,"Tag":"Server 3","Start":0,"End":0,"Description":"leader","Details":"became leader in term 1 with 3 votes","Annotation":true,"TextColor":"","BackgroundColor":""},{"ClientId":0,"Tag":"Test Framework","Start":300,"End":700,"Description":"partition [3] [1 2]","Details":"","Annotation":true,"TextColor":"","BackgroundColor":"#efaefc"},{"ClientId":0,"Tag":"Test Framework","Start":800,"End":1500,"Description":"partition [2] [1 3]","Details":"","Annotation":true,"TextColor":"","BackgroundColor":"#efaefc"}]}
 
       render(data)
     </script>

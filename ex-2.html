@@ -1,6 +1,7 @@
 <!doctype html>
 <html>
   <head>
+    <meta charset="UTF-8" />
     <title>Porcupine</title>
     <style>
       html {
@@ -45,6 +46,12 @@ text {
   stroke: #888;
   stroke-width: 1;
   fill: #42d1f5;
+}
+
+.client-annotation-rect {
+  stroke: #888;
+  stroke-width: 1;
+  fill: #e0e0e0;
 }
 
 .link {
@@ -186,19 +193,47 @@ function render(data) {
   const PADDING = 10
   const BOX_HEIGHT = 30
   const BOX_SPACE = 15
-  const XOFF = 20
   const EPSILON = 20
   const LINE_BLEED = 5
   const BOX_GAP = 20
   const BOX_TEXT_PADDING = 10
   const HISTORY_RECT_RADIUS = 4
 
+  const annotations = data['Annotations']
+  const coreHistory = data['Partitions']
+  // for simplicity, make annotations look like more history
+  const allData = [...coreHistory, { History: annotations }]
+
   let maxClient = -1
-  data.forEach((partition) => {
+  allData.forEach((partition) => {
     partition['History'].forEach((el) => {
       maxClient = Math.max(maxClient, el['ClientId'])
     })
   })
+  // "real" clients, not including tags
+  const realClients = maxClient + 1
+  // we treat each unique annotation tag as another "client"
+  const tags = new Set()
+  annotations.forEach((annot) => {
+    const tag = annot['Tag']
+    if (tag.length !== 0) {
+      tags.add(tag)
+    }
+  })
+  // add synthetic client numbers
+  const tag2ClientId = {}
+  const sortedTags = Array.from(tags).sort()
+  sortedTags.forEach((tag) => {
+    maxClient = maxClient + 1
+    tag2ClientId[tag] = maxClient
+  })
+  annotations.forEach((annot) => {
+    const tag = annot['Tag']
+    if (tag.length !== 0) {
+      annot['ClientId'] = tag2ClientId[tag]
+    }
+  })
+  // total number of clients now includes these synthetic clients
   const nClient = maxClient + 1
 
   // Prepare some useful data to be used later:
@@ -208,12 +243,14 @@ function render(data) {
   // - Create a set of all start timestamps
   const allTimestamps = new Set()
   const startTimestamps = new Set()
+  const endTimestamps = new Set()
   let gid = 0
   const byGid = {}
-  data.forEach((partition) => {
+  allData.forEach((partition) => {
     partition['History'].forEach((el) => {
       allTimestamps.add(el['Start'])
       startTimestamps.add(el['Start'])
+      endTimestamps.add(el['End'])
       allTimestamps.add(el['End'])
       // give elements GIDs
       el['Gid'] = gid
@@ -223,29 +260,72 @@ function render(data) {
   })
   let sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b)
 
-  // This should not happen with "real" histories, but for certain edge
-  // cases, we need to deal with having multiple events share a start/end
-  // time. We solve this by tweaking the events that share the end time,
-  // updating the time to end+epsilon. In practice, rather than having to
-  // choose an epsilon, we choose to average the value with the next largest
-  // timestamp.
-  const nextTs = {}
-  for (let i = 0; i < sortedTimestamps.length - 1; i++) {
-    nextTs[sortedTimestamps[i]] = sortedTimestamps[i + 1]
-  }
-  data.forEach((partition) => {
+  // If one event has the same end time as another's start time, that means that
+  // they are concurrent, and we need to display them with overlap. We do this
+  // by tweaking the events that share the end time, updating the time to
+  // end+epsilon, so we have overlap.
+  //
+  // We do not render a good visualization in the situation where a single
+  // client has two events where one has an end time that matches the other's
+  // start time.  There isn't an easy way to handle this, because these two
+  // operations are concurrent (see the comment in model.go for more details for
+  // why it must be this way), and we can't display them with overlap on the
+  // same row cleanly.
+  const epsilon = 16
+  // coordinated with computeVisualizationData, which uses an incrementing
+  // counter multiplied by 100, so it's safe to adjust timestamps by += epsilon
+  // without it overlapping with another adjusted timestamp (2*16 < 100)
+  allData.forEach((partition, index) => {
+    if (index === allData.length - 1) {
+      return // last partition is the annotations
+    }
     partition['History'].forEach((el) => {
       let end = el['End']
-      el['OriginalEnd'] = end // for display purposes
       if (startTimestamps.has(end)) {
-        if (Object.prototype.hasOwnProperty.call(nextTs, end)) {
-          const tweaked = (end + nextTs[end]) / 2
-          el['End'] = tweaked
-          allTimestamps.add(tweaked)
-        }
+        el['End'] = end + epsilon
+        allTimestamps.add(el['End'])
       }
     })
   })
+
+  // Handle display of (1) annotations where one has the same end time as
+  // another's start time, and (2) point-in-time annotations, on the same row.
+  //
+  // Unlike operations, where we interpret the start and end times as a closed
+  // interval (and where they have to be displayed with overlap, to be able to
+  // render linearizations and partial linearizations correctly), annotations
+  // are for display purposes only and we can interpret annotations with
+  // different start/end times as open intervals, and render two annotations
+  // with times (a, b) and (b, c) without overlap. We can also handle the
+  // situation where we have a point-in-time annotation with times (b, b).
+  //
+  // This code currently does not handle the case where we have two
+  // point-in-time annotations with the same tag at the same timestamp.
+  //
+  // We keep the annotation adjustment epsilon even smaller (dividing by 2), so
+  // adjusting an event's end time forward by epsilon doesn't overlap with an
+  // annotation's start time that's adjusted forwards (the adjustment of
+  // annotations goes in the opposite direction as that for events).
+  allData[allData.length - 1]['History'].forEach((el) => {
+    if (el['End'] === el['Start']) {
+      // point-in-time annotation: we adjust these to have a non-zero-duration;
+      // we only need to edit the end timestamp, and we can leave the start
+      // as-is
+      el['End'] += epsilon / 4
+      allTimestamps.add(el['End'])
+    } else {
+      // annotation touching another event or annotation
+      if (startTimestamps.has(el['End'])) {
+        el['End'] -= epsilon / 2
+        allTimestamps.add(el['End'])
+      }
+      if (endTimestamps.has(el['Start'])) {
+        el['Start'] += epsilon / 2
+        allTimestamps.add(el['Start'])
+      }
+    }
+  })
+
   // Update sortedTimestamps, because we created some new timestamps.
   sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b)
 
@@ -285,7 +365,7 @@ function render(data) {
   const xPos = {}
   // Compute some information about history elements, sorted by end time;
   // the most important information here is box width.
-  const byEnd = data
+  const byEnd = allData
     .flatMap((partition) =>
       partition['History'].map((el) => {
         // compute width of the text inside the history element by actually
@@ -316,7 +396,7 @@ function render(data) {
   const eventIllegalLast = newArray(gid, () => []) // event -> [index]
   const allLinearizations = []
   let lgid = 0
-  data.forEach((partition) => {
+  coreHistory.forEach((partition) => {
     partition['PartialLinearizations'].forEach((lin) => {
       const globalized = [] // linearization with global indexes instead of partition-local ones
       const included = new Set() // for figuring out illegal next LPs
@@ -407,13 +487,33 @@ function render(data) {
     xPos[ts] = pos
   }
 
+  // get maximum tag width
+  let maxTagWidth = 0
+  for (let i = 0; i < nClient; i++) {
+    const tag = i < realClients ? i.toString() : sortedTags[i - realClients]
+    const scratch = document.getElementById('calc')
+    scratch.innerHTML = ''
+    const svg = svgadd(scratch, 'svg')
+    const text = svgadd(svg, 'text', {
+      'text-anchor': 'end',
+    })
+    text.textContent = tag
+    const bbox = text.getBBox()
+    const width = bbox.width + 2 * BOX_TEXT_PADDING
+    if (width > maxTagWidth) {
+      maxTagWidth = width
+    }
+  }
+
+  const t0x = PADDING + maxTagWidth // X-pos of line at t=0
+
   // Solved, now draw UI.
 
   let selected = false
   let selectedIndex = [-1, -1]
 
   const height = 2 * PADDING + BOX_HEIGHT * nClient + BOX_SPACE * (nClient - 1)
-  const width = 2 * PADDING + XOFF + xPos[sortedTimestamps[sortedTimestamps.length - 1]]
+  const width = 2 * PADDING + maxTagWidth + xPos[sortedTimestamps[sortedTimestamps.length - 1]]
   const svg = svgadd(document.getElementById('canvas'), 'svg', {
     width: width,
     height: height,
@@ -431,25 +531,37 @@ function render(data) {
   bgRect.onclick = handleBgClick
   for (let i = 0; i < nClient; i++) {
     const text = svgadd(bg, 'text', {
-      x: XOFF / 2,
+      x: PADDING + maxTagWidth - BOX_TEXT_PADDING,
       y: PADDING + BOX_HEIGHT / 2 + i * (BOX_HEIGHT + BOX_SPACE),
-      'text-anchor': 'middle',
+      'text-anchor': 'end',
     })
-    text.textContent = i
+    text.textContent = i < realClients ? i : sortedTags[i - realClients]
   }
+  // vertical line at t=0
   svgadd(bg, 'line', {
-    x1: PADDING + XOFF,
+    x1: t0x,
     y1: PADDING,
-    x2: PADDING + XOFF,
+    x2: t0x,
     y2: height - PADDING,
     class: 'divider',
   })
+  // horizontal line dividing clients from annotation tags, but only if there are tags
+  if (tags.size > 0) {
+    const annotationLineY = PADDING + realClients * (BOX_HEIGHT + BOX_SPACE) - BOX_SPACE / 2
+    svgadd(bg, 'line', {
+      x1: PADDING,
+      y1: annotationLineY,
+      x2: t0x,
+      y2: annotationLineY,
+      class: 'divider',
+    })
+  }
 
   // draw history
   const historyLayers = []
   const historyRects = []
   const targetRects = svgnew('g')
-  data.forEach((partition, partitionIndex) => {
+  allData.forEach((partition, partitionIndex) => {
     const l = svgadd(svg, 'g')
     historyLayers.push(l)
     const rects = []
@@ -457,8 +569,9 @@ function render(data) {
       const g = svgadd(l, 'g')
       const rx = xPos[el['Start']]
       const width = xPos[el['End']] - rx
-      const x = rx + XOFF + PADDING
+      const x = rx + t0x
       const y = PADDING + el['ClientId'] * (BOX_HEIGHT + BOX_SPACE)
+      const rectClass = el['Annotation'] ? 'client-annotation-rect' : 'history-rect'
       rects.push(
         svgadd(g, 'rect', {
           height: BOX_HEIGHT,
@@ -467,7 +580,11 @@ function render(data) {
           y: y,
           rx: HISTORY_RECT_RADIUS,
           ry: HISTORY_RECT_RADIUS,
-          class: 'history-rect',
+          class: rectClass,
+          style:
+            el['Annotation'] && el['BackgroundColor'].length !== 0
+              ? `fill: ${el['BackgroundColor']};`
+              : '',
         })
       )
       const text = svgadd(g, 'text', {
@@ -475,6 +592,7 @@ function render(data) {
         y: y + BOX_HEIGHT / 2,
         'text-anchor': 'middle',
         class: 'history-text',
+        style: el['Annotation'] && el['TextColor'].length !== 0 ? `fill: ${el['TextColor']};` : '',
       })
       text.textContent = el['Description']
       // we don't add mouseTarget to g, but to targetRects, because we
@@ -499,18 +617,18 @@ function render(data) {
   })
 
   // draw partial linearizations
-  const illegalLast = data.map((partition) => {
+  const illegalLast = coreHistory.map((partition) => {
     return partition['PartialLinearizations'].map(() => new Set())
   })
-  const largestIllegal = data.map(() => {
+  const largestIllegal = coreHistory.map(() => {
     return {}
   })
-  const largestIllegalLength = data.map(() => {
+  const largestIllegalLength = coreHistory.map(() => {
     return {}
   })
   const partialLayers = []
   const errorPoints = []
-  data.forEach((partition, partitionIndex) => {
+  coreHistory.forEach((partition, partitionIndex) => {
     const l = []
     partialLayers.push(l)
     partition['PartialLinearizations'].forEach((lin, linIndex) => {
@@ -522,7 +640,7 @@ function render(data) {
       const included = new Set()
       lin.forEach((id) => {
         const el = partition['History'][id['Index']]
-        const hereX = PADDING + XOFF + xPos[el['Start']]
+        const hereX = t0x + xPos[el['Start']]
         const x = prevX !== null ? Math.max(hereX, prevX + EPSILON) : hereX
         const y = PADDING + el['ClientId'] * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
         // line from previous
@@ -560,7 +678,7 @@ function render(data) {
       })
       partition['History'].forEach((el, index) => {
         if (!included.has(index) && el['Start'] < minEnd) {
-          const hereX = PADDING + XOFF + xPos[el['Start']]
+          const hereX = t0x + xPos[el['Start']]
           const x = prevX !== null ? Math.max(hereX, prevX + EPSILON) : hereX
           const y = PADDING + el['ClientId'] * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
           // line from previous
@@ -617,8 +735,12 @@ function render(data) {
 
   function linearizationIndex(partition, index) {
     // show this linearization
-    if (Object.prototype.hasOwnProperty.call(data[partition]['Largest'], index)) {
-      return data[partition]['Largest'][index]
+    if (partition >= coreHistory.length) {
+      // annotation
+      return null
+    }
+    if (Object.prototype.hasOwnProperty.call(coreHistory[partition]['Largest'], index)) {
+      return coreHistory[partition]['Largest'][index]
     } else if (Object.prototype.hasOwnProperty.call(largestIllegal[partition], index)) {
       return largestIllegal[partition][index]
     }
@@ -663,7 +785,11 @@ function render(data) {
         // if selected, show info relevant to the selected linearization
         maxIndex = linearizationIndex(sPartition, sIndex)
       }
-      if (selected && sPartition !== partition) {
+      if (partition >= coreHistory.length) {
+        // annotation
+        const details = annotations[index]['Details']
+        tooltip.innerHTML = details.length === 0 ? '&langle;no details&rangle;' : details
+      } else if (selected && sPartition !== partition) {
         tooltip.innerHTML = 'Not part of selected partition.'
       } else if (maxIndex === null) {
         if (!selected) {
@@ -672,7 +798,7 @@ function render(data) {
           tooltip.innerHTML = 'Selected element is not part of any partial linearization.'
         }
       } else {
-        const lin = data[partition]['PartialLinearizations'][maxIndex]
+        const lin = coreHistory[partition]['PartialLinearizations'][maxIndex]
         let prev = null,
           curr = null
         let found = false
@@ -684,8 +810,8 @@ function render(data) {
             break
           }
         }
-        let call = data[partition]['History'][index]['Start']
-        let ret = data[partition]['History'][index]['OriginalEnd']
+        let call = allData[partition]['History'][index]['OriginalStart']
+        let ret = allData[partition]['History'][index]['OriginalEnd']
         let msg = ''
         if (found) {
           // part of linearization
@@ -811,7 +937,7 @@ function render(data) {
 }
 
 
-      const data = [{"History":[{"ClientId":0,"Start":0,"End":5,"Description":"put('200')"},{"ClientId":1,"Start":1,"End":2,"Description":"get() -\u003e '200'"},{"ClientId":2,"Start":3,"End":4,"Description":"get() -\u003e '0'"}],"PartialLinearizations":[[{"Index":0,"StateDescription":"200"},{"Index":1,"StateDescription":"200"}]],"Largest":{"0":0,"1":0}}]
+      const data = {"Partitions":[{"History":[{"ClientId":0,"Start":0,"OriginalStart":"0","End":500,"OriginalEnd":"5","Description":"put('200')"},{"ClientId":1,"Start":100,"OriginalStart":"1","End":200,"OriginalEnd":"2","Description":"get() -\u003e '200'"},{"ClientId":2,"Start":300,"OriginalStart":"3","End":400,"OriginalEnd":"4","Description":"get() -\u003e '0'"}],"PartialLinearizations":[[{"Index":0,"StateDescription":"200"},{"Index":1,"StateDescription":"200"}]],"Largest":{"0":0,"1":0}}],"Annotations":[]}
 
       render(data)
     </script>
