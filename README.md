@@ -1,4 +1,6 @@
 # Porcupine [![Build Status](https://github.com/anishathalye/porcupine/actions/workflows/ci.yml/badge.svg)](https://github.com/anishathalye/porcupine/actions/workflows/ci.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/anishathalye/porcupine)](https://pkg.go.dev/github.com/anishathalye/porcupine)
+[![Go Report Card](https://goreportcard.com/badge/github.com/anishathalye/porcupine)](https://goreportcard.com/report/github.com/anishathalye/porcupine)
+[![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
 
 Porcupine is a fast linearizability checker [used](#users) in both academia and
 industry for testing the correctness of distributed systems. It takes a
