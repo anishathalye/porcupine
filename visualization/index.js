@@ -592,8 +592,8 @@ function render(data) {
       const partition = parseInt(this.dataset['partition'])
       const index = parseInt(this.dataset['index'])
       highlight(partition, index)
+      tooltip.style.display = 'block'
     }
-    tooltip.style.display = 'block'
   }
 
   function linearizationIndex(partition, index) {
@@ -635,6 +635,11 @@ function render(data) {
 
   let lastTooltip = [null, null, null, null, null]
   function handleMouseMove() {
+    // keep tooltip static if selected
+    if (selected) {
+      return
+    }
+
     const partition = parseInt(this.dataset['partition'])
     const index = parseInt(this.dataset['index'])
     const [sPartition, sIndex] = selectedIndex
@@ -719,9 +724,9 @@ function render(data) {
   function handleMouseOut() {
     if (!selected) {
       resetHighlight()
+      tooltip.style.display = 'none'
+      lastTooltip = [null, null, null, null, null]
     }
-    tooltip.style.display = 'none'
-    lastTooltip = [null, null, null, null, null]
   }
 
   function resetHighlight() {
@@ -773,10 +778,18 @@ function render(data) {
       }
     }
     select(partition, index)
+
+    tooltip.style.display = 'block'
+    // Set static tooltip position when selecting
+    tooltip.style.left = event.pageX + 20 + 'px'
+    tooltip.style.top = event.pageY + 20 + 'px'
   }
 
   function handleBgClick() {
     deselect()
+
+    tooltip.style.display = 'none'
+    lastTooltip = [null, null, null, null, null]
   }
 
   function select(partition, index) {
