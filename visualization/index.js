@@ -772,6 +772,7 @@ function render(data) {
       const [sPartition, sIndex] = selectedIndex
       if (partition === sPartition && index === sIndex) {
         deselect()
+        // note: we're still displaying the tooltip, but once the user's mouse moves, it'll get updated
         return
       } else {
         historyRects[sPartition][sIndex].classList.remove('selected')
@@ -781,7 +782,12 @@ function render(data) {
 
     tooltip.style.display = 'block'
     // Set static tooltip position when selecting
-    tooltip.style.left = event.pageX + 20 + 'px'
+    const maxX =
+      document.documentElement.scrollLeft +
+      document.documentElement.clientWidth -
+      PADDING -
+      tooltip.getBoundingClientRect().width
+    tooltip.style.left = Math.min(event.pageX + 20, maxX) + 'px'
     tooltip.style.top = event.pageY + 20 + 'px'
   }
 
