@@ -1,0 +1,4 @@
+{
+  "prettier": true,
+  "envs": ["browser"]
+}

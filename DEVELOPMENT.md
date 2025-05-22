@@ -51,6 +51,12 @@ You can run staticcheck with:
 staticcheck -f stylish ./...
 ```
 
+This project uses [XO] to lint JavaScript code. You can run XO with:
+
+```bash
+npx xo
+```
+
 [staticcheck]: https://staticcheck.dev/
 
 ## Continuous integration

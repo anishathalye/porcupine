@@ -59,3 +59,9 @@ jobs:
         run: go vet ./...
       - name: Staticcheck
         run: "staticcheck -f stylish ./..."
+      - name: Install node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: XO
+        run: npx xo
