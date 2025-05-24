@@ -94,7 +94,7 @@ function render(data) {
 
   // Add synthetic client numbers
   const tag2ClientId = {}
-  const sortedTags = Array.from(tags).sort()
+  const sortedTags = [...tags].sort()
   for (const tag of sortedTags) {
     maxClient += 1
     tag2ClientId[tag] = maxClient
@@ -133,7 +133,7 @@ function render(data) {
     }
   }
 
-  let sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b)
+  let sortedTimestamps = [...allTimestamps].sort((a, b) => a - b)
 
   // If one event has the same end time as another's start time, that means that
   // they are concurrent, and we need to display them with overlap. We do this
@@ -204,7 +204,7 @@ function render(data) {
   }
 
   // Update sortedTimestamps, because we created some new timestamps.
-  sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b)
+  sortedTimestamps = [...allTimestamps].sort((a, b) => a - b)
 
   // Compute layout.
   //
@@ -324,14 +324,15 @@ function render(data) {
       // that include that event, for the prefix that comes before that event,
       // all their start points must have been placed already, so we can figure
       // out the minimum width that the box needs to be to accommodate the LP.
-      for (const li of eventToLinearizations[event_.gid].concat(
-        eventIllegalLast[event_.gid].map((index) => {
+      for (const li of [
+        ...eventToLinearizations[event_.gid],
+        ...eventIllegalLast[event_.gid].map((index) => {
           return {
             index,
             position: allLinearizations[index].length - 1,
           }
-        })
-      )) {
+        }),
+      ]) {
         const {index, position} = li
         for (let i = linearizationPositions[index].length; i <= position; i++) {
           // Determine past points

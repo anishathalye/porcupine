@@ -64,4 +64,4 @@ jobs:
         with:
           node-version: '22'
       - name: XO
-        run: npx xo
+        run: npx xo --cwd visualization
