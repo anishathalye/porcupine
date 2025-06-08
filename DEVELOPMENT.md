@@ -58,6 +58,7 @@ npx xo
 ```
 
 [staticcheck]: https://staticcheck.dev/
+[XO]: https://github.com/xojs/xo
 
 ## Continuous integration
 
