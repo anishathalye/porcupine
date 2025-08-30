@@ -246,6 +246,7 @@ framework with linearizability checking at its core.
 - [etcd](https://github.com/etcd-io/etcd). etcd uses Porcupine's linearizability checker and visualizer in its [robustness tests](https://github.com/etcd-io/etcd/tree/main/tests/robustness) [[KubeCon 2023eu talk](https://www.youtube.com/watch?v=IIMs0EjQZHg)].
 - [PingCAP TiPocket](https://github.com/pingcap/tipocket). PingCAP uses Porcupine to test the [TiDB](https://www.pingcap.com/tidb/) distributed database.
 - [Amazon MemoryDB (SIGMOD'24)](https://www.amazon.science/publications/amazon-memorydb-a-fast-and-durable-memory-first-cloud-database). Amazon uses Porcupine to test MemoryDB consistency.
+- [S2 Stream Store](https://s2.dev/). S2 [uses](https://s2.dev/blog/linearizability) Porcupine's linearizability checker and visualizer in its [linearizability tests](https://github.com/s2-streamstore/s2-verification).
 - [LEGOStore (VLDB'22)](https://www.vldb.org/pvldb/vol15/p2201-zare.pdf). Porcupine is used to test the linearizability of LEGOStore.
 - [Resonate](https://github.com/resonatehq/durable-promise-test-harness). Resonate's test harness uses Porcupine as its linearizability checker.
 - [MIT 6.5840 (Distributed Systems) key-value store](https://pdos.csail.mit.edu/6.824/labs/lab-kvraft.html). Porcupine was originally developed for use in MIT's distributed systems class to test the linearizability of the Raft-based distributed key-value store.
