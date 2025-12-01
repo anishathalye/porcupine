@@ -58,6 +58,10 @@ function arrayEq(a, b) {
   return true
 }
 
+function formatCallReturn(callTime, returnTime) {
+  return '<br><br>Call: ' + callTime + '<br><br>Return: ' + returnTime
+}
+
 // eslint-disable-next-line no-unused-vars, complexity
 function render(data) {
   const PADDING = 10
@@ -694,16 +698,23 @@ function render(data) {
         ? linearizationIndex(sPartition, sIndex)
         : linearizationIndex(partition, index)
 
+      const callTime = allData[partition].History[index].OriginalStart
+      const returnTime = allData[partition].History[index].OriginalEnd
+
       if (partition >= coreHistory.length) {
         // Annotation
         const details = annotations[index].Details
         tooltip.innerHTML = details.length === 0 ? '&langle;no details&rangle;' : details
       } else if (selected && sPartition !== partition) {
-        tooltip.innerHTML = 'Not part of selected partition.'
+        tooltip.innerHTML =
+          'Not part of selected partition.' +
+          formatCallReturn(callTime, returnTime)
       } else if (maxIndex === null) {
-        tooltip.innerHTML = selected
-          ? 'Selected element is not part of any partial linearization.'
-          : 'Not part of any partial linearization.'
+        tooltip.innerHTML =
+          (selected
+            ? 'Selected element is not part of any partial linearization.'
+            : 'Not part of any partial linearization.') +
+          formatCallReturn(callTime, returnTime)
       } else {
         const lin = coreHistory[partition].PartialLinearizations[maxIndex]
         let previous = null
@@ -718,8 +729,6 @@ function render(data) {
           }
         }
 
-        const callTime = allData[partition].History[index].OriginalStart
-        const returnTime = allData[partition].History[index].OriginalEnd
         let message = ''
         if (found) {
           // Part of linearization
@@ -731,23 +740,19 @@ function render(data) {
           message +=
             '<strong>New state:</strong><br>' +
             current.StateDescription +
-            '<br><br>Call: ' +
-            callTime +
-            '<br><br>Return: ' +
-            returnTime
+            formatCallReturn(callTime, returnTime)
         } else if (illegalLast[partition][maxIndex].has(index)) {
           // Illegal next one
           message =
             '<strong>Previous state:</strong><br>' +
             lin.at(-1).StateDescription +
             '<br><br><strong>New state:</strong><br>&langle;invalid op&rangle;' +
-            '<br><br>Call: ' +
-            callTime +
-            '<br><br>Return: ' +
-            returnTime
+            formatCallReturn(callTime, returnTime)
         } else {
           // Not part of this one
-          message = "Not part of selected element's partial linearization."
+          message =
+            "Not part of selected element's partial linearization." +
+            formatCallReturn(callTime, returnTime)
         }
 
         tooltip.innerHTML = message

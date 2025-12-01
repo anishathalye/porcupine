@@ -3,6 +3,7 @@ package porcupine
 import (
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -211,4 +212,83 @@ func TestVisualizeAnnotationsNoEvents(t *testing.T) {
 	}
 	info.AddAnnotations(annotations)
 	visualizeTempFile(t, kvModel, info)
+}
+
+func TestVisualizationCallAndReturnTime(t *testing.T) {
+	tests := []struct {
+		name           string
+		ops            []Operation
+		expectedRes    CheckResult
+		expectedStarts []string
+		expectedEnds   []string
+	}{
+		{
+			name: "LinearizableContent",
+			ops: []Operation{
+				{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100},
+			},
+			expectedRes:    Ok, // CheckOperationsVerbose returns Ok for linearizable
+			expectedStarts: []string{`"OriginalStart":"0"`},
+			expectedEnds:   []string{`"OriginalEnd":"100"`},
+		},
+		{
+			name: "NotLinearizedSingleIllegal",
+			ops: []Operation{
+				{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100},
+				{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 10, Output: kvOutput{"b"}, Return: 110}, // not linearizable
+			},
+			expectedRes:    Illegal,
+			expectedStarts: []string{`"OriginalStart":"0"`, `"OriginalStart":"10"`},
+			expectedEnds:   []string{`"OriginalEnd":"100"`, `"OriginalEnd":"110"`},
+		},
+		{
+			name: "NotPartiallyLinearized",
+			ops: []Operation{
+				{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100},
+				{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 10, Output: kvOutput{"b"}, Return: 110}, // not linearizable
+				{ClientId: 2, Input: kvInput{op: 0, key: "x"}, Call: 120, Output: kvOutput{"a"}, Return: 130},
+			},
+			expectedRes:    Illegal,
+			expectedStarts: []string{`"OriginalStart":"0"`, `"OriginalStart":"10"`, `"OriginalStart":"120"`},
+			expectedEnds:   []string{`"OriginalEnd":"100"`, `"OriginalEnd":"110"`, `"OriginalEnd":"130"`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, info := CheckOperationsVerbose(kvModel, tt.ops, 0)
+			if res != tt.expectedRes {
+				t.Fatalf("expected result %v, got %v", tt.expectedRes, res)
+			}
+
+			file, err := os.CreateTemp("", "porcupine_test_*.html")
+			if err != nil {
+				t.Fatalf("failed to create temp file: %v", err)
+			}
+			defer os.Remove(file.Name())
+			defer file.Close()
+
+			if err := Visualize(kvModel, info, file); err != nil {
+				t.Fatalf("Visualize failed: %v", err)
+			}
+
+			content, err := os.ReadFile(file.Name())
+			if err != nil {
+				t.Fatalf("failed to read generated HTML: %v", err)
+			}
+
+			if len(tt.expectedStarts) != len(tt.expectedEnds) {
+				t.Fatalf("mismatch between expectedStarts and expectedEnds length")
+			}
+
+			for i := range tt.expectedStarts {
+				if !strings.Contains(string(content), tt.expectedStarts[i]) {
+					t.Errorf("expected HTML to contain %s", tt.expectedStarts[i])
+				}
+				if !strings.Contains(string(content), tt.expectedEnds[i]) {
+					t.Errorf("expected HTML to contain %s", tt.expectedEnds[i])
+				}
+			}
+		})
+	}
 }
