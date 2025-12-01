@@ -20,7 +20,10 @@ type Operation struct {
 	Input    interface{}
 	Call     int64 // invocation timestamp
 	Output   interface{}
-	Return   int64    // response timestamp
+	Return   int64 // response timestamp
+	// Metadata contains arbitrary metadata associated with the operation.
+	// It is not used for linearizability checking but can be used for visualization.
+	Metadata interface{}
 	_        struct{} // disallow positional literals, for extensibility
 }
 
@@ -114,7 +117,10 @@ type Model struct {
 	// example, "{'x' -> 'y', 'z' -> 'w'}". Can be omitted if you're not
 	// producing visualizations.
 	DescribeState func(state interface{}) string
-	_             struct{} // disallow positional literals, for extensibility
+	// For visualization purposes, describe metadata as a string. Can be
+	// omitted if you're not producing visualizations.
+	DescribeOperationMetadata func(info interface{}) string
+	_                         struct{} // disallow positional literals, for extensibility
 }
 
 // A NondeterministicModel is a nondeterministic sequential specification of a
@@ -153,7 +159,10 @@ type NondeterministicModel struct {
 	// example, "{'x' -> 'y', 'z' -> 'w'}". Can be omitted if you're not
 	// producing visualizations.
 	DescribeState func(state interface{}) string
-	_             struct{} // disallow positional literals, for extensibility
+	// For visualization purposes, describe metadata as a string. Can be
+	// omitted if you're not producing visualizations.
+	DescribeOperationMetadata func(info interface{}) string
+	_                         struct{} // disallow positional literals, for extensibility
 }
 
 func merge(states []interface{}, eq func(state1, state2 interface{}) bool) []interface{} {
@@ -194,6 +203,10 @@ func (nm *NondeterministicModel) ToModel() Model {
 	describeState := nm.DescribeState
 	if describeState == nil {
 		describeState = defaultDescribeState
+	}
+	describeOperationMetadata := nm.DescribeOperationMetadata
+	if describeOperationMetadata == nil {
+		describeOperationMetadata = defaultDescribeOperationMetadata
 	}
 	return Model{
 		Partition:      nm.Partition,
@@ -242,6 +255,7 @@ func (nm *NondeterministicModel) ToModel() Model {
 			}
 			return fmt.Sprintf("{%s}", strings.Join(descriptions, ", "))
 		},
+		DescribeOperationMetadata: describeOperationMetadata,
 	}
 }
 
@@ -273,6 +287,15 @@ func defaultDescribeOperation(input interface{}, output interface{}) string {
 // renders the state using the "%v" format specifier.
 func defaultDescribeState(state interface{}) string {
 	return fmt.Sprintf("%v", state)
+}
+
+// defaultDescribeOperationMetadata is a fallback to convert metadata to a
+// string. It renders the metadata using the "%v" format specifier.
+func defaultDescribeOperationMetadata(info interface{}) string {
+	if info == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", info)
 }
 
 // A CheckResult is the result of a linearizability check.

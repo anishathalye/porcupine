@@ -1,6 +1,7 @@
 package porcupine
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -21,15 +22,15 @@ func visualizeTempFile(t *testing.T, model Model, info LinearizationInfo) {
 
 func TestVisualizationMultipleLengths(t *testing.T) {
 	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10},
-		{ClientId: 2, Input: kvInput{op: 1, key: "x", value: "z"}, Call: 0, Output: kvOutput{}, Return: 10},
-		{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 20, Output: kvOutput{"y"}, Return: 30},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "w"}, Call: 35, Output: kvOutput{}, Return: 45},
-		{ClientId: 5, Input: kvInput{op: 0, key: "x"}, Call: 25, Output: kvOutput{"z"}, Return: 35},
-		{ClientId: 3, Input: kvInput{op: 0, key: "x"}, Call: 30, Output: kvOutput{"y"}, Return: 40},
-		{ClientId: 4, Input: kvInput{op: 0, key: "y"}, Call: 50, Output: kvOutput{"a"}, Return: 90},
-		{ClientId: 2, Input: kvInput{op: 1, key: "y", value: "a"}, Call: 55, Output: kvOutput{}, Return: 85},
+		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100, Metadata: nil},
+		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10, Metadata: nil},
+		{ClientId: 2, Input: kvInput{op: 1, key: "x", value: "z"}, Call: 0, Output: kvOutput{}, Return: 10, Metadata: nil},
+		{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 20, Output: kvOutput{"y"}, Return: 30, Metadata: nil},
+		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "w"}, Call: 35, Output: kvOutput{}, Return: 45, Metadata: nil},
+		{ClientId: 5, Input: kvInput{op: 0, key: "x"}, Call: 25, Output: kvOutput{"z"}, Return: 35, Metadata: nil},
+		{ClientId: 3, Input: kvInput{op: 0, key: "x"}, Call: 30, Output: kvOutput{"y"}, Return: 40, Metadata: nil},
+		{ClientId: 4, Input: kvInput{op: 0, key: "y"}, Call: 50, Output: kvOutput{"a"}, Return: 90, Metadata: nil},
+		{ClientId: 2, Input: kvInput{op: 1, key: "y", value: "a"}, Call: 55, Output: kvOutput{}, Return: 85, Metadata: nil},
 	}
 	res, info := CheckOperationsVerbose(kvModel, ops, 0)
 	if res != Illegal {
@@ -132,15 +133,15 @@ func TestVisualizationLarge(t *testing.T) {
 func TestVisualizationAnnotations(t *testing.T) {
 	// base set of operations same as TestVisualizationMultipleLengths
 	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10},
-		{ClientId: 2, Input: kvInput{op: 1, key: "x", value: "z"}, Call: 0, Output: kvOutput{}, Return: 10},
-		{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 20, Output: kvOutput{"y"}, Return: 30},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "w"}, Call: 35, Output: kvOutput{}, Return: 45},
-		{ClientId: 5, Input: kvInput{op: 0, key: "x"}, Call: 25, Output: kvOutput{"z"}, Return: 35},
-		{ClientId: 3, Input: kvInput{op: 0, key: "x"}, Call: 30, Output: kvOutput{"y"}, Return: 40},
-		{ClientId: 4, Input: kvInput{op: 0, key: "y"}, Call: 50, Output: kvOutput{"a"}, Return: 90},
-		{ClientId: 2, Input: kvInput{op: 1, key: "y", value: "a"}, Call: 55, Output: kvOutput{}, Return: 85},
+		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100, Metadata: nil},
+		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10, Metadata: nil},
+		{ClientId: 2, Input: kvInput{op: 1, key: "x", value: "z"}, Call: 0, Output: kvOutput{}, Return: 10, Metadata: nil},
+		{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 20, Output: kvOutput{"y"}, Return: 30, Metadata: nil},
+		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "w"}, Call: 35, Output: kvOutput{}, Return: 45, Metadata: nil},
+		{ClientId: 5, Input: kvInput{op: 0, key: "x"}, Call: 25, Output: kvOutput{"z"}, Return: 35, Metadata: nil},
+		{ClientId: 3, Input: kvInput{op: 0, key: "x"}, Call: 30, Output: kvOutput{"y"}, Return: 40, Metadata: nil},
+		{ClientId: 4, Input: kvInput{op: 0, key: "y"}, Call: 50, Output: kvOutput{"a"}, Return: 90, Metadata: nil},
+		{ClientId: 2, Input: kvInput{op: 1, key: "y", value: "a"}, Call: 55, Output: kvOutput{}, Return: 85, Metadata: nil},
 	}
 	res, info := CheckOperationsVerbose(kvModel, ops, 0)
 	annotations := []Annotation{
@@ -167,8 +168,8 @@ func TestVisualizationAnnotations(t *testing.T) {
 
 func TestVisualizePointInTimeAnnotationsEnd(t *testing.T) {
 	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 50, Output: kvOutput{}, Return: 60},
+		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100, Metadata: nil},
+		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 50, Output: kvOutput{}, Return: 60, Metadata: nil},
 	}
 	res, info := CheckOperationsVerbose(kvModel, ops, 0)
 	if res != Illegal {
@@ -187,8 +188,8 @@ func TestVisualizePointInTimeAnnotationsEnd(t *testing.T) {
 
 func TestVisualizeMatchingStartEnd(t *testing.T) {
 	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 50},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 50, Output: kvOutput{}, Return: 80},
+		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 50, Metadata: nil},
+		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 50, Output: kvOutput{}, Return: 80, Metadata: nil},
 	}
 	res, info := CheckOperationsVerbose(kvModel, ops, 0)
 	if res != Illegal {
@@ -225,7 +226,7 @@ func TestVisualizationCallAndReturnTime(t *testing.T) {
 		{
 			name: "LinearizableContent",
 			ops: []Operation{
-				{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100},
+				{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100, Metadata: ""},
 			},
 			expectedRes:    Ok, // CheckOperationsVerbose returns Ok for linearizable
 			expectedStarts: []string{`"OriginalStart":"0"`},
@@ -290,5 +291,117 @@ func TestVisualizationCallAndReturnTime(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestVisualizationStringMetadata(t *testing.T) {
+	model := kvModel
+	model.DescribeOperationMetadata = func(info interface{}) string {
+		return fmt.Sprintf("custom: %v", info)
+	}
+
+	ops := []Operation{
+		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100, Metadata: "meta1"},
+	}
+	_, info := CheckOperationsVerbose(model, ops, 0)
+
+	file, err := os.CreateTemp("", "porcupine_test_custom_metadata_*.html")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(file.Name())
+	defer file.Close()
+
+	if err := Visualize(model, info, file); err != nil {
+		t.Fatalf("Visualize failed: %v", err)
+	}
+
+	content, err := os.ReadFile(file.Name())
+	if err != nil {
+		t.Fatalf("failed to read generated HTML: %v", err)
+	}
+
+	if !strings.Contains(string(content), "custom: meta1") {
+		t.Errorf("expected HTML to contain custom metadata 'custom: meta1'")
+	}
+}
+
+type customMetadata struct {
+	ID   int
+	Info string
+}
+
+func TestVisualizationStructMetadata(t *testing.T) {
+	ops := []Operation{
+		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100, Metadata: customMetadata{1, "meta1"}},
+		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10, Metadata: customMetadata{2, "meta2"}},
+	}
+
+	// Define a model that handles custom metadata
+	model := kvModel
+	model.DescribeOperationMetadata = func(info interface{}) string {
+		if m, ok := info.(customMetadata); ok {
+			return fmt.Sprintf("ID:%d, Info:%s", m.ID, m.Info)
+		}
+		return fmt.Sprintf("%v", info)
+	}
+
+	_, info := CheckOperationsVerbose(model, ops, 0)
+
+	file, err := os.CreateTemp("", "porcupine_test_custom_metadata_*.html")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(file.Name())
+	defer file.Close()
+
+	if err := Visualize(model, info, file); err != nil {
+		t.Fatalf("Visualize failed: %v", err)
+	}
+
+	content, err := os.ReadFile(file.Name())
+	if err != nil {
+		t.Fatalf("failed to read generated HTML: %v", err)
+	}
+
+	s := string(content)
+	if !strings.Contains(s, "ID:1, Info:meta1") {
+		t.Errorf("expected HTML to contain ID:1, Info:meta1")
+	}
+	if !strings.Contains(s, "ID:2, Info:meta2") {
+		t.Errorf("expected HTML to contain ID:2, Info:meta2")
+	}
+}
+
+func TestVisualizationMetadataAlwaysVisible(t *testing.T) {
+	ops := []Operation{
+		{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "val"}, Call: 0, Output: kvOutput{}, Return: 100, Metadata: "meta_linearizable"},
+		{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 5, Output: kvOutput{"invalid"}, Return: 10, Metadata: "meta_not_linearizable"},
+	}
+
+	_, info := CheckOperationsVerbose(kvModel, ops, 0)
+
+	file, err := os.CreateTemp("", "porcupine_test_metadata_visible_*.html")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(file.Name())
+	defer file.Close()
+
+	if err := Visualize(kvModel, info, file); err != nil {
+		t.Fatalf("Visualize failed: %v", err)
+	}
+
+	content, err := os.ReadFile(file.Name())
+	if err != nil {
+		t.Fatalf("failed to read generated HTML: %v", err)
+	}
+
+	s := string(content)
+	if !strings.Contains(s, "meta_linearizable") {
+		t.Errorf("expected HTML to contain meta_linearizable")
+	}
+	if !strings.Contains(s, "meta_not_linearizable") {
+		t.Errorf("expected HTML to contain meta_not_linearizable")
 	}
 }

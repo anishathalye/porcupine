@@ -16,6 +16,7 @@ type historyElement struct {
 	End           int
 	OriginalEnd   string
 	Description   string
+	Metadata      string
 }
 
 type annotation struct {
@@ -152,6 +153,7 @@ func computeVisualizationData(model Model, info LinearizationInfo) visualization
 				history[elem.id].Start = timeMap[elem.time]
 				history[elem.id].OriginalStart = fmt.Sprintf("%d", elem.time)
 				callValue[elem.id] = elem.value
+				history[elem.id].Metadata = model.DescribeOperationMetadata(elem.metadata)
 			case returnEntry:
 				history[elem.id].End = timeMap[elem.time]
 				history[elem.id].OriginalEnd = fmt.Sprintf("%d", elem.time)

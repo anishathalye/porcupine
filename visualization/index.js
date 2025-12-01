@@ -701,18 +701,28 @@ function render(data) {
       const callTime = allData[partition].History[index].OriginalStart
       const returnTime = allData[partition].History[index].OriginalEnd
 
+      let metadata = ''
+      if (partition < coreHistory.length) {
+        const m = allData[partition].History[index].Metadata
+        if (m !== '') {
+          metadata = m + '<br><br>'
+        }
+      }
+
       if (partition >= coreHistory.length) {
         // Annotation
         const details = annotations[index].Details
         tooltip.innerHTML = details.length === 0 ? '&langle;no details&rangle;' : details
       } else if (selected && sPartition !== partition) {
         tooltip.innerHTML =
-          'Not part of selected partition.' + formatCallReturn(callTime, returnTime)
+          metadata + 'Not part of selected partition.' + formatCallReturn(callTime, returnTime)
       } else if (maxIndex === null) {
         tooltip.innerHTML =
+          metadata +
           (selected
             ? 'Selected element is not part of any partial linearization.'
-            : 'Not part of any partial linearization.') + formatCallReturn(callTime, returnTime)
+            : 'Not part of any partial linearization.') +
+          formatCallReturn(callTime, returnTime)
       } else {
         const lin = coreHistory[partition].PartialLinearizations[maxIndex]
         let previous = null
@@ -727,11 +737,12 @@ function render(data) {
           }
         }
 
-        let message = ''
+        let message = metadata
+
         if (found) {
           // Part of linearization
           if (previous !== null) {
-            message =
+            message +=
               '<strong>Previous state:</strong><br>' + previous.StateDescription + '<br><br>'
           }
 
@@ -741,14 +752,14 @@ function render(data) {
             formatCallReturn(callTime, returnTime)
         } else if (illegalLast[partition][maxIndex].has(index)) {
           // Illegal next one
-          message =
+          message +=
             '<strong>Previous state:</strong><br>' +
             lin.at(-1).StateDescription +
             '<br><br><strong>New state:</strong><br>&langle;invalid op&rangle;' +
             formatCallReturn(callTime, returnTime)
         } else {
           // Not part of this one
-          message =
+          message +=
             "Not part of selected element's partial linearization." +
             formatCallReturn(callTime, returnTime)
         }

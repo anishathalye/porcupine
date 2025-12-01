@@ -19,6 +19,7 @@ type entry struct {
 	id       int
 	time     int64
 	clientId int
+	metadata interface{}
 }
 
 type LinearizationInfo struct {
@@ -74,6 +75,7 @@ func (li *LinearizationInfo) PartialLinearizationsOperations() [][][]Operation {
 				Call:     call.time,
 				Output:   ret.value,
 				Return:   ret.time,
+				Metadata: call.metadata,
 			}
 		}
 
@@ -121,9 +123,9 @@ func makeEntries(history []Operation) []entry {
 	id := 0
 	for _, elem := range history {
 		entries = append(entries, entry{
-			callEntry, elem.Input, id, elem.Call, elem.ClientId})
+			callEntry, elem.Input, id, elem.Call, elem.ClientId, elem.Metadata})
 		entries = append(entries, entry{
-			returnEntry, elem.Output, id, elem.Return, elem.ClientId})
+			returnEntry, elem.Output, id, elem.Return, elem.ClientId, elem.Metadata})
 		id++
 	}
 	sort.Sort(byTime(entries))
@@ -184,7 +186,7 @@ func convertEntries(events []Event) []entry {
 			kind = returnEntry
 		}
 		// use index as "time"
-		entries = append(entries, entry{kind, elem.Value, elem.Id, int64(i), elem.ClientId})
+		entries = append(entries, entry{kind, elem.Value, elem.Id, int64(i), elem.ClientId, nil})
 	}
 	return entries
 }
@@ -338,6 +340,9 @@ func fillDefault(model Model) Model {
 	}
 	if model.DescribeState == nil {
 		model.DescribeState = defaultDescribeState
+	}
+	if model.DescribeOperationMetadata == nil {
+		model.DescribeOperationMetadata = defaultDescribeOperationMetadata
 	}
 	return model
 }
