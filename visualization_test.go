@@ -1,9 +1,11 @@
 package porcupine
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -305,6 +307,16 @@ func TestVisualizationStringMetadata(t *testing.T) {
 	}
 	_, info := CheckOperationsVerbose(model, ops, 0)
 
+	// Part 1: Test data structure directly
+	data := computeVisualizationData(model, info)
+	if len(data.Partitions) != 1 || len(data.Partitions[0].History) != 1 {
+		t.Fatalf("unexpected partition structure")
+	}
+	if data.Partitions[0].History[0].Metadata != "custom: meta1" {
+		t.Errorf("expected Metadata='custom: meta1', got '%s'", data.Partitions[0].History[0].Metadata)
+	}
+
+	// Part 2: Test HTML output
 	file, err := os.CreateTemp("", "porcupine_test_custom_metadata_*.html")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -321,8 +333,22 @@ func TestVisualizationStringMetadata(t *testing.T) {
 		t.Fatalf("failed to read generated HTML: %v", err)
 	}
 
-	if !strings.Contains(string(content), "custom: meta1") {
-		t.Errorf("expected HTML to contain custom metadata 'custom: meta1'")
+	re := regexp.MustCompile(`const data = (\{.*\})`)
+	matches := re.FindSubmatch(content)
+	if len(matches) < 2 {
+		t.Fatal("failed to extract JSON data from HTML")
+	}
+
+	var htmlData visualizationData
+	if err := json.Unmarshal(matches[1], &htmlData); err != nil {
+		t.Fatalf("failed to unmarshal JSON from HTML: %v", err)
+	}
+
+	if len(htmlData.Partitions) != 1 || len(htmlData.Partitions[0].History) != 1 {
+		t.Fatalf("unexpected HTML data structure")
+	}
+	if htmlData.Partitions[0].History[0].Metadata != "custom: meta1" {
+		t.Errorf("HTML: expected Metadata='custom: meta1', got '%s'", htmlData.Partitions[0].History[0].Metadata)
 	}
 }
 
@@ -348,6 +374,20 @@ func TestVisualizationStructMetadata(t *testing.T) {
 
 	_, info := CheckOperationsVerbose(model, ops, 0)
 
+	// Part 1: Test data structure directly
+	data := computeVisualizationData(model, info)
+	if len(data.Partitions) != 1 || len(data.Partitions[0].History) != 2 {
+		t.Fatalf("unexpected partition structure")
+	}
+	history := data.Partitions[0].History
+	if history[0].Metadata != "ID:1, Info:meta1" {
+		t.Errorf("expected history[0].Metadata='ID:1, Info:meta1', got '%s'", history[0].Metadata)
+	}
+	if history[1].Metadata != "ID:2, Info:meta2" {
+		t.Errorf("expected history[1].Metadata='ID:2, Info:meta2', got '%s'", history[1].Metadata)
+	}
+
+	// Part 2: Test HTML output
 	file, err := os.CreateTemp("", "porcupine_test_custom_metadata_*.html")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -364,12 +404,26 @@ func TestVisualizationStructMetadata(t *testing.T) {
 		t.Fatalf("failed to read generated HTML: %v", err)
 	}
 
-	s := string(content)
-	if !strings.Contains(s, "ID:1, Info:meta1") {
-		t.Errorf("expected HTML to contain ID:1, Info:meta1")
+	re := regexp.MustCompile(`const data = (\{.*\})`)
+	matches := re.FindSubmatch(content)
+	if len(matches) < 2 {
+		t.Fatal("failed to extract JSON data from HTML")
 	}
-	if !strings.Contains(s, "ID:2, Info:meta2") {
-		t.Errorf("expected HTML to contain ID:2, Info:meta2")
+
+	var htmlData visualizationData
+	if err := json.Unmarshal(matches[1], &htmlData); err != nil {
+		t.Fatalf("failed to unmarshal JSON from HTML: %v", err)
+	}
+
+	if len(htmlData.Partitions) != 1 || len(htmlData.Partitions[0].History) != 2 {
+		t.Fatalf("unexpected HTML data structure")
+	}
+	htmlHistory := htmlData.Partitions[0].History
+	if htmlHistory[0].Metadata != "ID:1, Info:meta1" {
+		t.Errorf("HTML: expected history[0].Metadata='ID:1, Info:meta1', got '%s'", htmlHistory[0].Metadata)
+	}
+	if htmlHistory[1].Metadata != "ID:2, Info:meta2" {
+		t.Errorf("HTML: expected history[1].Metadata='ID:2, Info:meta2', got '%s'", htmlHistory[1].Metadata)
 	}
 }
 
@@ -381,6 +435,21 @@ func TestVisualizationMetadataAlwaysVisible(t *testing.T) {
 
 	_, info := CheckOperationsVerbose(kvModel, ops, 0)
 
+	// Part 1: Test data structure directly
+	data := computeVisualizationData(kvModel, info)
+	if len(data.Partitions) != 1 || len(data.Partitions[0].History) != 2 {
+		t.Fatalf("unexpected partition structure")
+	}
+	history := data.Partitions[0].History
+	// Both linearizable and non-linearizable operations should have metadata
+	if history[0].Metadata != "meta_linearizable" {
+		t.Errorf("expected history[0].Metadata='meta_linearizable', got '%s'", history[0].Metadata)
+	}
+	if history[1].Metadata != "meta_not_linearizable" {
+		t.Errorf("expected history[1].Metadata='meta_not_linearizable', got '%s'", history[1].Metadata)
+	}
+
+	// Part 2: Test HTML output
 	file, err := os.CreateTemp("", "porcupine_test_metadata_visible_*.html")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -397,12 +466,26 @@ func TestVisualizationMetadataAlwaysVisible(t *testing.T) {
 		t.Fatalf("failed to read generated HTML: %v", err)
 	}
 
-	s := string(content)
-	if !strings.Contains(s, "meta_linearizable") {
-		t.Errorf("expected HTML to contain meta_linearizable")
+	re := regexp.MustCompile(`const data = (\{.*\})`)
+	matches := re.FindSubmatch(content)
+	if len(matches) < 2 {
+		t.Fatal("failed to extract JSON data from HTML")
 	}
-	if !strings.Contains(s, "meta_not_linearizable") {
-		t.Errorf("expected HTML to contain meta_not_linearizable")
+
+	var htmlData visualizationData
+	if err := json.Unmarshal(matches[1], &htmlData); err != nil {
+		t.Fatalf("failed to unmarshal JSON from HTML: %v", err)
+	}
+
+	if len(htmlData.Partitions) != 1 || len(htmlData.Partitions[0].History) != 2 {
+		t.Fatalf("unexpected HTML data structure")
+	}
+	htmlHistory := htmlData.Partitions[0].History
+	if htmlHistory[0].Metadata != "meta_linearizable" {
+		t.Errorf("HTML: expected history[0].Metadata='meta_linearizable', got '%s'", htmlHistory[0].Metadata)
+	}
+	if htmlHistory[1].Metadata != "meta_not_linearizable" {
+		t.Errorf("HTML: expected history[1].Metadata='meta_not_linearizable', got '%s'", htmlHistory[1].Metadata)
 	}
 }
 
@@ -431,6 +514,35 @@ func TestVisualizationEventMetadata(t *testing.T) {
 		t.Fatal("expected operations to be linearizable")
 	}
 
+	// Part 1: Test data structure directly
+	data := computeVisualizationData(model, info)
+
+	if len(data.Partitions) != 1 {
+		t.Fatalf("expected 1 partition, got %d", len(data.Partitions))
+	}
+	history := data.Partitions[0].History
+	if len(history) != 2 {
+		t.Fatalf("expected 2 history elements, got %d", len(history))
+	}
+
+	// Verify metadata is associated with the correct operations
+	// history[0] = operation Id=0 (Write, ClientId=0)
+	if history[0].ClientId != 0 {
+		t.Errorf("expected history[0].ClientId=0, got %d", history[0].ClientId)
+	}
+	if history[0].Metadata != "event-meta: write-call-meta" {
+		t.Errorf("expected history[0].Metadata='event-meta: write-call-meta', got '%s'", history[0].Metadata)
+	}
+
+	// history[1] = operation Id=1 (Read, ClientId=1)
+	if history[1].ClientId != 1 {
+		t.Errorf("expected history[1].ClientId=1, got %d", history[1].ClientId)
+	}
+	if history[1].Metadata != "event-meta: read-call-meta" {
+		t.Errorf("expected history[1].Metadata='event-meta: read-call-meta', got '%s'", history[1].Metadata)
+	}
+
+	// Part 2: Test HTML output (end-to-end verification)
 	file, err := os.CreateTemp("", "porcupine_test_event_metadata_*.html")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -447,16 +559,27 @@ func TestVisualizationEventMetadata(t *testing.T) {
 		t.Fatalf("failed to read generated HTML: %v", err)
 	}
 
-	s := string(content)
-	// CallEvent metadata should be present
-	if !strings.Contains(s, "event-meta: write-call-meta") {
-		t.Errorf("expected HTML to contain 'event-meta: write-call-meta'")
+	// Extract JSON from HTML: "const data = {...}"
+	re := regexp.MustCompile(`const data = (\{.*\})`)
+	matches := re.FindSubmatch(content)
+	if len(matches) < 2 {
+		t.Fatal("failed to extract JSON data from HTML")
 	}
-	if !strings.Contains(s, "event-meta: read-call-meta") {
-		t.Errorf("expected HTML to contain 'event-meta: read-call-meta'")
+
+	var htmlData visualizationData
+	if err := json.Unmarshal(matches[1], &htmlData); err != nil {
+		t.Fatalf("failed to unmarshal JSON from HTML: %v", err)
 	}
-	// ReturnEvent metadata should be ignored
-	if strings.Contains(s, "SHOULD-BE-IGNORED") {
-		t.Errorf("expected HTML to NOT contain ReturnEvent metadata, but found 'SHOULD-BE-IGNORED'")
+
+	// Verify HTML contains correctly structured data
+	if len(htmlData.Partitions) != 1 || len(htmlData.Partitions[0].History) != 2 {
+		t.Fatalf("unexpected HTML data structure")
+	}
+	htmlHistory := htmlData.Partitions[0].History
+	if htmlHistory[0].Metadata != "event-meta: write-call-meta" {
+		t.Errorf("HTML: expected history[0].Metadata='event-meta: write-call-meta', got '%s'", htmlHistory[0].Metadata)
+	}
+	if htmlHistory[1].Metadata != "event-meta: read-call-meta" {
+		t.Errorf("HTML: expected history[1].Metadata='event-meta: read-call-meta', got '%s'", htmlHistory[1].Metadata)
 	}
 }
