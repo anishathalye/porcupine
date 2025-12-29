@@ -68,6 +68,10 @@ type Event struct {
 	Kind     EventKind
 	Value    interface{}
 	Id       int
+	// Metadata contains arbitrary metadata associated with the operation.
+	// It is not used for linearizability checking but can be used for visualization.
+	// Only set this on CallEvent; it is ignored for ReturnEvent.
+	Metadata interface{}
 	_        struct{} // disallow positional literals, for extensibility
 }
 

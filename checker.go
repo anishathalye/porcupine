@@ -168,9 +168,9 @@ func renumber(events []Event) []Event {
 	id := 0
 	for _, v := range events {
 		if r, ok := m[v.Id]; ok {
-			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: r})
+			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: r, Metadata: v.Metadata})
 		} else {
-			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: id})
+			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: id, Metadata: v.Metadata})
 			m[v.Id] = id
 			id++
 		}
@@ -182,11 +182,15 @@ func convertEntries(events []Event) []entry {
 	var entries []entry
 	for i, elem := range events {
 		kind := callEntry
+		var metadata interface{}
 		if elem.Kind == ReturnEvent {
 			kind = returnEntry
+			// ignore metadata on return events (only call events carry metadata)
+		} else {
+			metadata = elem.Metadata
 		}
 		// use index as "time"
-		entries = append(entries, entry{kind, elem.Value, elem.Id, int64(i), elem.ClientId, nil})
+		entries = append(entries, entry{kind, elem.Value, elem.Id, int64(i), elem.ClientId, metadata})
 	}
 	return entries
 }

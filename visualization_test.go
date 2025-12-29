@@ -405,3 +405,58 @@ func TestVisualizationMetadataAlwaysVisible(t *testing.T) {
 		t.Errorf("expected HTML to contain meta_not_linearizable")
 	}
 }
+
+func TestVisualizationEventMetadata(t *testing.T) {
+	model := registerModel
+	model.DescribeOperationMetadata = func(info interface{}) string {
+		if info == nil {
+			return ""
+		}
+		return fmt.Sprintf("event-meta: %v", info)
+	}
+
+	events := []Event{
+		// C0: Write(100) with metadata on CallEvent
+		{Kind: CallEvent, Value: registerInput{false, 100}, Id: 0, ClientId: 0, Metadata: "write-call-meta"},
+		// C1: Read() with metadata on CallEvent
+		{Kind: CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1, Metadata: "read-call-meta"},
+		// C1: Completed Read -> 100 (metadata on ReturnEvent should be ignored)
+		{Kind: ReturnEvent, Value: 100, Id: 1, ClientId: 1, Metadata: "read-return-meta-SHOULD-BE-IGNORED"},
+		// C0: Completed Write (metadata on ReturnEvent should be ignored)
+		{Kind: ReturnEvent, Value: 0, Id: 0, ClientId: 0, Metadata: "write-return-meta-SHOULD-BE-IGNORED"},
+	}
+
+	res, info := CheckEventsVerbose(model, events, 0)
+	if res != Ok {
+		t.Fatal("expected operations to be linearizable")
+	}
+
+	file, err := os.CreateTemp("", "porcupine_test_event_metadata_*.html")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(file.Name())
+	defer file.Close()
+
+	if err := Visualize(model, info, file); err != nil {
+		t.Fatalf("Visualize failed: %v", err)
+	}
+
+	content, err := os.ReadFile(file.Name())
+	if err != nil {
+		t.Fatalf("failed to read generated HTML: %v", err)
+	}
+
+	s := string(content)
+	// CallEvent metadata should be present
+	if !strings.Contains(s, "event-meta: write-call-meta") {
+		t.Errorf("expected HTML to contain 'event-meta: write-call-meta'")
+	}
+	if !strings.Contains(s, "event-meta: read-call-meta") {
+		t.Errorf("expected HTML to contain 'event-meta: read-call-meta'")
+	}
+	// ReturnEvent metadata should be ignored
+	if strings.Contains(s, "SHOULD-BE-IGNORED") {
+		t.Errorf("expected HTML to NOT contain ReturnEvent metadata, but found 'SHOULD-BE-IGNORED'")
+	}
+}
