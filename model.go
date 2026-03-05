@@ -24,6 +24,7 @@ type Operation struct {
 	// Metadata contains arbitrary metadata associated with the operation.
 	// It is not used for linearizability checking but can be used for visualization.
 	Metadata interface{}
+	Hint     interface{}
 	_        struct{} // disallow positional literals, for extensibility
 }
 
@@ -72,8 +73,21 @@ type Event struct {
 	// It is not used for linearizability checking but can be used for visualization.
 	// Can be set on CallEvent or ReturnEvent. If both have metadata, ReturnEvent metadata takes precedence.
 	Metadata interface{}
+	Hint     interface{}
 	_        struct{} // disallow positional literals, for extensibility
 }
+
+// PrecKind represents the kind of precedence relationship between two operations
+type PrecKind int
+
+const (
+	// Indicates that event a should be strictly ordered before event b.
+	HappensBefore PrecKind = -2
+	// Indicates that there is no information about the relative order of operations a and b.
+	Unconstrained PrecKind = 0
+	// Indicates that event a should be strictly ordered after event b.
+	HappensAfter PrecKind = 2
+)
 
 // A Model is a sequential specification of a system.
 //
@@ -124,6 +138,9 @@ type Model struct {
 	// For visualization purposes, describe metadata as a string. Can be
 	// omitted if you're not producing visualizations.
 	DescribeOperationMetadata func(info interface{}) string
+	// To compare hints. If left nil, hints are ignored. Returns a PrecKind
+	// indicating the precedence relationship between events.
+	Prec func(a interface{}, b interface{}) PrecKind
 	_                         struct{} // disallow positional literals, for extensibility
 }
 
