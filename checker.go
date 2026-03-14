@@ -256,7 +256,13 @@ func unlift(entry *node) {
 
 func checkSingle(model Model, history []entry, computePartial bool, kill *int32) (bool, []*[]int) {
 	entry := makeLinkedEntries(history)
-	n := length(entry) / 2
+	n := 0
+	for _, v := range history {
+		if v.id > n {
+			n = v.id
+		}
+	}
+	n++
 	linearized := newBitset(uint(n))
 	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
 	var calls []callsEntry
