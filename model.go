@@ -82,11 +82,11 @@ type PrecKind int
 
 const (
 	// Indicates that event a should be strictly ordered before event b.
-	HappensBefore PrecKind = -2
+	HappensBefore PrecKind = -1
 	// Indicates that there is no information about the relative order of operations a and b.
 	Unconstrained PrecKind = 0
 	// Indicates that event a should be strictly ordered after event b.
-	HappensAfter PrecKind = 2
+	HappensAfter PrecKind = 1
 )
 
 // A Model is a sequential specification of a system.
@@ -141,7 +141,7 @@ type Model struct {
 	// To compare hints. If left nil, hints are ignored. Returns a PrecKind
 	// indicating the precedence relationship between events.
 	Prec func(a interface{}, b interface{}) PrecKind
-	_                         struct{} // disallow positional literals, for extensibility
+	_    struct{} // disallow positional literals, for extensibility
 }
 
 // A NondeterministicModel is a nondeterministic sequential specification of a

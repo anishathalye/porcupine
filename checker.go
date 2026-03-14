@@ -2,6 +2,7 @@ package porcupine
 
 import (
 	"sort"
+	"strconv"
 	"sync/atomic"
 	"time"
 )
@@ -145,6 +146,8 @@ type node struct {
 	next  *node
 	prev  *node
 	hint  interface{}
+	depts []*node // operations dependent on this one
+	nDeps int // number of operations on which this depends on
 }
 
 func insertBefore(n *node, mark *node) *node {
@@ -198,9 +201,15 @@ func convertEntries(events []Event) []entry {
 	return entries
 }
 
-func makeLinkedEntries(entries []entry) *node {
+type Comparator func(a, b interface{}) PrecKind
+
+func makeLinkedEntries(entries []entry, prec Comparator) *node {
 	var root *node = nil
 	match := make(map[int]*node)
+	if prec == nil {
+		prec = func(a, b interface{}) PrecKind { return Unconstrained }
+	}
+	concurrent := make(map[int]*node)
 	for i := len(entries) - 1; i >= 0; i-- {
 		elem := entries[i]
 		if elem.kind == returnEntry {
@@ -208,10 +217,26 @@ func makeLinkedEntries(entries []entry) *node {
 			match[elem.id] = entry
 			insertBefore(entry, root)
 			root = entry
+			concurrent[elem.id] = entry
 		} else {
-			entry := &node{value: elem.value, match: match[elem.id], id: elem.id, hint: match[elem.id].hint}
+			matching := match[elem.id]
+			if matching == nil {
+				panic("call entry with id: " + strconv.Itoa(elem.id) + " has no matching return")
+			}
+			entry := &node{value: elem.value, match: matching, id: elem.id}
 			insertBefore(entry, root)
 			root = entry
+			delete(concurrent, elem.id)
+			for _, op := range concurrent {
+				switch prec(op.hint, matching.hint) {
+				case HappensAfter:
+					matching.depts = append(matching.depts, op)
+					op.nDeps++
+				case HappensBefore:
+					op.depts = append(op.depts, matching)
+					matching.nDeps++
+				}
+			}
 		}
 	}
 	return root
@@ -244,6 +269,9 @@ func lift(entry *node) {
 	if match.next != nil {
 		match.next.prev = match.prev
 	}
+	for _, dept := range entry.match.depts {
+		dept.nDeps--
+	}
 }
 
 func unlift(entry *node) {
@@ -254,100 +282,19 @@ func unlift(entry *node) {
 	}
 	entry.prev.next = entry
 	entry.next.prev = entry
-}
-
-type Comparator func(a, b interface{}) PrecKind
-type DAG struct {
-	prec  Comparator
-	edges map[int][]int
-	count map[int]int
-	front map[int]struct{}
-}
-
-func (d *DAG) Init(entry *node) {
-	d.edges = make(map[int][]int)
-	d.count = make(map[int]int)
-	if d.prec == nil {
-		d.prec = func(a, b interface{}) PrecKind { return Unconstrained }
+	for _, dept := range entry.match.depts {
+		dept.nDeps++
 	}
-
-	concurrent := make(map[int]*node)
-	front := make(map[int]struct{})
-	var prevRet *node
-	for entry != nil {
-		op2 := entry
-		if entry.match != nil {
-			if prevRet == nil {
-				front[op2.id] = struct{}{}
-			} else {
-				d.edges[prevRet.id] = append(d.edges[prevRet.id], op2.id)
-				d.count[op2.id] = 1
-			}
-			for _, op1 := range concurrent {
-				switch d.prec(op1.hint, op2.hint) {
-				case HappensAfter:
-					d.edges[op2.id] = append(d.edges[op2.id], op1.id)
-					d.count[op1.id]++
-					if prevRet == nil {
-						delete(front, op1.id)
-					}
-				case HappensBefore:
-					d.edges[op1.id] = append(d.edges[op1.id], op2.id)
-					d.count[op2.id]++
-					if prevRet == nil {
-						delete(front, op2.id)
-					}
-				}
-			}
-			concurrent[op2.id] = op2
-		} else {
-			prevRet = entry
-			delete(concurrent, op2.id)
-		}
-		entry = entry.next
-	}
-	d.front = front
-}
-
-func (d *DAG) Lift(id int) bool {
-	if _, ok := d.front[id]; !ok {
-		return false
-	}
-	for _, child := range d.edges[id] {
-		d.count[child]--
-		if d.count[child] == 0 {
-			d.front[child] = struct{}{}
-		}
-	}
-	delete(d.front, id)
-	return true
-}
-
-func (d *DAG) Unlift(id int) {
-	for _, child := range d.edges[id] {
-		if d.count[child] == 0 {
-			delete(d.front, child)
-		}
-		d.count[child]++
-	}
-	d.front[id] = struct{}{}
-}
-
-func (d *DAG) InFront(id int) bool {
-	_, ok := d.front[id]
-	return ok
 }
 
 func checkSingle(model Model, history []entry, computePartial bool, kill *int32) (bool, []*[]int) {
-	entry := makeLinkedEntries(history)
+	entry := makeLinkedEntries(history, model.Prec)
 	n := length(entry) / 2
 	linearized := newBitset(uint(n))
 	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
 	var calls []callsEntry
 	// longest linearizable prefix that includes the given entry
 	longest := make([]*[]int, n)
-	dag := DAG{prec: model.Prec}
-	dag.Init(entry)
 
 	state := model.Init()
 	headEntry := insertBefore(&node{value: nil, match: nil, id: -1}, entry)
@@ -358,7 +305,7 @@ func checkSingle(model Model, history []entry, computePartial bool, kill *int32)
 		if entry.match != nil {
 			matching := entry.match // the return entry
 			ok, newState := model.Step(state, entry.value, matching.value)
-			if ok && dag.InFront(entry.id) {
+			if ok && entry.match.nDeps == 0 {
 				newLinearized := linearized.clone().set(uint(entry.id))
 				newCacheEntry := cacheEntry{newLinearized, newState}
 				if !cacheContains(model, cache, newCacheEntry) {
@@ -368,7 +315,6 @@ func checkSingle(model Model, history []entry, computePartial bool, kill *int32)
 					state = newState
 					linearized.set(uint(entry.id))
 					lift(entry)
-					dag.Lift(entry.id)
 					entry = headEntry.next
 				} else {
 					entry = entry.next
@@ -403,7 +349,6 @@ func checkSingle(model Model, history []entry, computePartial bool, kill *int32)
 			linearized.clear(uint(entry.id))
 			calls = calls[:len(calls)-1]
 			unlift(entry)
-			dag.Unlift(entry.id)
 			entry = entry.next
 		}
 	}
