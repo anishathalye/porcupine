@@ -82,11 +82,15 @@ type PrecKind int
 
 const (
 	// Indicates that event a should be strictly ordered before event b.
-	HappensBefore PrecKind = -1
+	HappensBefore PrecKind = -2
+	// Indicates that event a should likely be ordered before event b.
+	LikelyBefore PrecKind = -1
 	// Indicates that there is no information about the relative order of operations a and b.
 	Unconstrained PrecKind = 0
+	// Indicates that event a should likely be ordered after event b.
+	LikelyAfter PrecKind = 1
 	// Indicates that event a should be strictly ordered after event b.
-	HappensAfter PrecKind = 1
+	HappensAfter PrecKind = 2
 )
 
 // A Model is a sequential specification of a system.
