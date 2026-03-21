@@ -77,21 +77,32 @@ type Event struct {
 	_        struct{} // disallow positional literals, for extensibility
 }
 
-// PrecKind represents the kind of precedence relationship between two operations
-type PrecKind int
+// OrderKind represents the kind of precedence relationship between two operations
+type OrderKind int
 
 const (
 	// Indicates that event a should be strictly ordered before event b.
-	HappensBefore PrecKind = -2
+	HappensBefore OrderKind = -2
 	// Indicates that event a should likely be ordered before event b.
-	LikelyBefore PrecKind = -1
+	LikelyBefore OrderKind = -1
 	// Indicates that there is no information about the relative order of operations a and b.
-	Unconstrained PrecKind = 0
+	Unconstrained OrderKind = 0
 	// Indicates that event a should likely be ordered after event b.
-	LikelyAfter PrecKind = 1
+	LikelyAfter OrderKind = 1
 	// Indicates that event a should be strictly ordered after event b.
-	HappensAfter PrecKind = 2
+	HappensAfter OrderKind = 2
 )
+
+// A node in the DAG
+type Node struct {
+	Id       int
+	ClientId int
+	Input    interface{}
+	Output   interface{}
+	Hint     interface{}
+	Call     int64
+	Ret      int64
+}
 
 // A Model is a sequential specification of a system.
 //
@@ -142,10 +153,13 @@ type Model struct {
 	// For visualization purposes, describe metadata as a string. Can be
 	// omitted if you're not producing visualizations.
 	DescribeOperationMetadata func(info interface{}) string
+	// The consistency model to be checked. Returns a DAG defining the
+	// order between nodes representing operations.
+	ConsistencyModel func(nodes []*Node) (map[*Node]map[*Node]struct{}, error)
 	// To compare hints. If left nil, hints are ignored. Returns a PrecKind
 	// indicating the precedence relationship between events.
-	Prec func(a interface{}, b interface{}) PrecKind
-	_    struct{} // disallow positional literals, for extensibility
+	Order func(a interface{}, b interface{}) OrderKind
+	_     struct{} // disallow positional literals, for extensibility
 }
 
 // A NondeterministicModel is a nondeterministic sequential specification of a

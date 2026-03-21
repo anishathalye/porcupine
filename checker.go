@@ -193,17 +193,10 @@ func cacheContains(model Model, cache map[uint64][]cacheEntry, entry cacheEntry)
 	return false
 }
 
-type node struct {
-	id        int
-	input     interface{}
-	output    interface{}
-	hint      interface{}
-	startTime int64
-}
+type comparator func(a, b interface{}) OrderKind
 
-type comparator func(a, b interface{}) PrecKind
 type dag struct {
-	ops    []*node // map from id to op
+	ops    []*Node // map from id to Node
 	depts  [][]int
 	lDepts [][]int
 	nDeps  []int
@@ -212,81 +205,109 @@ type dag struct {
 	comp   comparator
 }
 
-func setToSlice(set map[*node]struct{}) []int {
+func setToSlice(set map[*Node]struct{}) []int {
 	s := make([]int, 0, len(set))
 	for k := range set {
-		s = append(s, k.id)
+		s = append(s, k.Id)
 	}
 	return s
 }
 
-func (d *dag) Init(history []entry) {
+func (d *dag) Init(history []entry, model Model) {
 	if d.comp == nil {
-		d.comp = func(a, b interface{}) PrecKind { return Unconstrained }
+		d.comp = func(a, b interface{}) OrderKind { return Unconstrained }
 	}
 	n := len(history) / 2
-	d.ops = make([]*node, n)
-	depts := make([]map[*node]struct{}, n)
+	d.ops = make([]*Node, n)
 	d.depts = make([][]int, n)
-	lDepts := make([]map[*node]struct{}, n)
 	d.lDepts = make([][]int, n)
 	d.nDeps = make([]int, n)
 	d.nLDeps = make([]int, n)
-	d.front = make(map[int]struct{})
 
-	concurrent := make(map[int]*node)
-	rets := make(map[int]struct{})
 	for _, elem := range history {
 		if elem.kind == callEntry {
-			depts[elem.id] = make(map[*node]struct{})
-			lDepts[elem.id] = make(map[*node]struct{})
-			n := node{id: elem.id, input: elem.value, hint: elem.hint, startTime: elem.time}
+			n := Node{Id: elem.id, Input: elem.value, Hint: elem.hint, Call: elem.time, ClientId: elem.clientId}
 			d.ops[elem.id] = &n
-			concurrent[elem.id] = &n
-			for ret := range rets {
-				depts[ret][&n] = struct{}{}
-				d.nDeps[elem.id]++
-			}
 		} else {
 			op := d.ops[elem.id]
-			op.output = elem.value
-			delete(concurrent, elem.id)
-			for _, other := range concurrent {
-				switch d.comp(other.hint, elem.hint) {
+			op.Output = elem.value
+			op.Ret = elem.time
+		}
+	}
+
+	if model.ConsistencyModel == nil {
+		model.ConsistencyModel = Linearizability
+	}
+	adj, err := model.ConsistencyModel(d.ops)
+	if err != nil {
+		panic("failed to build dag using consistency model: " + err.Error())
+	}
+
+	depts := make([]map[*Node]struct{}, n)
+	nDeps := make([]int, n)
+	for n, dep := range adj {
+		depts[n.Id] = make(map[*Node]struct{})
+		for other := range dep {
+			d.depts[n.Id] = append(d.depts[n.Id], other.Id)
+			depts[n.Id][other] = struct{}{}
+			nDeps[other.Id]++
+			d.nDeps[other.Id]++
+		}
+	}
+
+	front := make(map[int]struct{})
+	for _, n := range d.ops {
+		if nDeps[n.Id] == 0 {
+			front[n.Id] = struct{}{}
+		}
+	}
+	for len(front) > 0 {
+		var node Node
+		found := false
+		for n := range front {
+			other := d.ops[n]
+			if !found {
+				node = *d.ops[n]
+				found = true
+			} else {
+				switch d.comp(other.Hint, node.Hint) {
 				case HappensAfter:
-					depts[op.id][other] = struct{}{}
-					d.nDeps[other.id]++
+					depts[node.Id][other] = struct{}{}
+					nDeps[other.Id]++
 				case HappensBefore:
-					depts[other.id][op] = struct{}{}
-					d.nDeps[op.id]++
+					depts[other.Id][&node] = struct{}{}
+					nDeps[node.Id]++
 				case LikelyAfter:
-					lDepts[op.id][other] = struct{}{}
-					d.nLDeps[other.id]++
+					d.lDepts[node.Id] = append(d.lDepts[node.Id], other.Id)
+					d.nLDeps[other.Id]++
 				case LikelyBefore:
-					lDepts[other.id][op] = struct{}{}
-					d.nLDeps[op.id]++
+					d.lDepts[other.Id] = append(d.lDepts[other.Id], node.Id)
+					d.nLDeps[node.Id]++
 				default:
-					if op.startTime < other.startTime {
-						lDepts[op.id][other] = struct{}{}
-						d.nLDeps[other.id]++
+					if node.Call < other.Call {
+						d.lDepts[node.Id] = append(d.lDepts[node.Id], other.Id)
+						d.nLDeps[other.Id]++
 					} else {
-						lDepts[other.id][op] = struct{}{}
-						d.nLDeps[op.id]++
+						d.lDepts[other.Id] = append(d.lDepts[other.Id], node.Id)
+						d.nLDeps[node.Id]++
 					}
 				}
 			}
-			for ret := range rets {
-				if _, ok := depts[ret][op]; ok {
-					delete(rets, ret)
-				}
+		}
+		delete(front, node.Id)
+		for _, other := range d.depts[node.Id] {
+			d.nDeps[other]--
+			if d.nDeps[other] == 0 {
+				front[other] = struct{}{}
 			}
-			rets[op.id] = struct{}{}
 		}
 	}
+
 	for i := 0; i < n; i++ {
 		d.depts[i] = setToSlice(depts[i])
-		d.lDepts[i] = setToSlice(lDepts[i])
+		d.nDeps[i] = nDeps[i]
 	}
+	d.front = make(map[int]struct{})
 	for _, elem := range history {
 		if elem.kind == callEntry {
 			if d.nDeps[elem.id] == 0 {
@@ -338,14 +359,14 @@ func (d *dag) getOrderedFront() []int {
 }
 
 type stackEntry struct {
-	node  *node
+	node  *Node
 	state interface{}
 	front []int
 }
 
 func checkSingle(model Model, history []entry, computePartial bool, kill *int32) (bool, []*[]int) {
-	d := dag{comp: model.Prec}
-	d.Init(history)
+	d := dag{comp: model.Order}
+	d.Init(history, model)
 	n := len(d.ops)
 	linearized := newBitset(uint(n))
 	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
@@ -370,43 +391,43 @@ func checkSingle(model Model, history []entry, computePartial bool, kill *int32)
 				callsLen := len(stack)
 				var seq []int = nil
 				for _, v := range stack {
-					if longest[v.node.id] == nil || callsLen > len(*longest[v.node.id]) {
+					if longest[v.node.Id] == nil || callsLen > len(*longest[v.node.Id]) {
 						// create seq lazily
 						if seq == nil {
 							seq = make([]int, len(stack))
 							for i, v := range stack {
-								seq[i] = v.node.id
+								seq[i] = v.node.Id
 							}
 						}
-						longest[v.node.id] = &seq
+						longest[v.node.Id] = &seq
 					}
 				}
 			}
 
 			stackTop := stack[len(stack)-1]
 			state = stackTop.state
-			linearized.clear(uint(stackTop.node.id))
+			linearized.clear(uint(stackTop.node.Id))
 			front = append([]int(nil), stackTop.front...)
 			stack = stack[:len(stack)-1]
-			d.unlift(stackTop.node.id)
+			d.unlift(stackTop.node.Id)
 			continue
 		}
 		opId := front[len(front)-1]
 		op := d.ops[opId]
 		front = front[:len(front)-1]
 
-		ok, newState := model.Step(state, op.input, op.output)
+		ok, newState := model.Step(state, op.Input, op.Output)
 		if ok {
-			newLinearized := linearized.clone().set(uint(op.id))
+			newLinearized := linearized.clone().set(uint(op.Id))
 			newCacheEntry := cacheEntry{newLinearized, newState}
 			if !cacheContains(model, cache, newCacheEntry) {
 				hash := newLinearized.hash()
 				cache[hash] = append(cache[hash], newCacheEntry)
 				stack = append(stack, stackEntry{op, state, append([]int{}, front...)})
-				d.lift(op.id)
+				d.lift(op.Id)
 				front = d.getOrderedFront()
 				state = newState
-				linearized.set(uint(op.id))
+				linearized.set(uint(op.Id))
 			}
 		}
 	}
@@ -414,7 +435,7 @@ func checkSingle(model Model, history []entry, computePartial bool, kill *int32)
 	// longest linearization is the complete linearization, which is calls
 	seq := make([]int, len(stack))
 	for i, v := range stack {
-		seq[i] = v.node.id
+		seq[i] = v.node.Id
 	}
 	for i := 0; i < n; i++ {
 		longest[i] = &seq
