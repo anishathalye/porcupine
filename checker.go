@@ -226,8 +226,8 @@ func (d *dag) Init(history []entry, model Model) {
 
 	for _, elem := range history {
 		if elem.kind == callEntry {
-			n := Node{Id: elem.id, Input: elem.value, Hint: elem.hint, Call: elem.time, ClientId: elem.clientId}
-			d.ops[elem.id] = &n
+			node := Node{Id: elem.id, Input: elem.value, Hint: elem.hint, Call: elem.time, ClientId: elem.clientId}
+			d.ops[elem.id] = &node
 		} else {
 			op := d.ops[elem.id]
 			op.Output = elem.value
@@ -242,79 +242,95 @@ func (d *dag) Init(history []entry, model Model) {
 	if err != nil {
 		panic("failed to build dag using consistency model: " + err.Error())
 	}
-
-	depts := make([]map[*Node]struct{}, n)
-	nDeps := make([]int, n)
-	for n, dep := range adj {
-		depts[n.Id] = make(map[*Node]struct{})
+	localNDeps := make([]int, n)
+	for node, dep := range adj {
 		for other := range dep {
-			d.depts[n.Id] = append(d.depts[n.Id], other.Id)
-			depts[n.Id][other] = struct{}{}
-			nDeps[other.Id]++
+			d.depts[node.Id] = append(d.depts[node.Id], other.Id)
 			d.nDeps[other.Id]++
+			localNDeps[other.Id]++
 		}
 	}
 
 	front := make(map[int]struct{})
-	for _, n := range d.ops {
-		if nDeps[n.Id] == 0 {
-			front[n.Id] = struct{}{}
-		}
-	}
-	for len(front) > 0 {
-		var node Node
-		found := false
-		for n := range front {
-			other := d.ops[n]
-			if !found {
-				node = *d.ops[n]
-				found = true
-			} else {
-				switch d.comp(other.Hint, node.Hint) {
-				case HappensAfter:
-					depts[node.Id][other] = struct{}{}
-					nDeps[other.Id]++
-				case HappensBefore:
-					depts[other.Id][&node] = struct{}{}
-					nDeps[node.Id]++
-				case LikelyAfter:
-					d.lDepts[node.Id] = append(d.lDepts[node.Id], other.Id)
-					d.nLDeps[other.Id]++
-				case LikelyBefore:
-					d.lDepts[other.Id] = append(d.lDepts[other.Id], node.Id)
-					d.nLDeps[node.Id]++
-				default:
-					if node.Call < other.Call {
-						d.lDepts[node.Id] = append(d.lDepts[node.Id], other.Id)
-						d.nLDeps[other.Id]++
-					} else {
-						d.lDepts[other.Id] = append(d.lDepts[other.Id], node.Id)
-						d.nLDeps[node.Id]++
-					}
-				}
-			}
-		}
-		delete(front, node.Id)
-		for _, other := range d.depts[node.Id] {
-			d.nDeps[other]--
-			if d.nDeps[other] == 0 {
-				front[other] = struct{}{}
-			}
+	candidates := make([]int, 0, n)
+	for i := 0; i < n; i++ {
+		if localNDeps[i] == 0 {
+			candidates = append(candidates, i)
 		}
 	}
 
-	for i := 0; i < n; i++ {
-		d.depts[i] = setToSlice(depts[i])
-		d.nDeps[i] = nDeps[i]
-	}
-	d.front = make(map[int]struct{})
-	for _, elem := range history {
-		if elem.kind == callEntry {
-			if d.nDeps[elem.id] == 0 {
-				d.front[elem.id] = struct{}{}
+	for len(front) > 0 || len(candidates) > 0 {
+
+		// pick operation from front, compare with front, update candidates
+		if len(front) > 0 {
+			var currId int
+			for id := range front {
+				currId = id
+				break
 			}
-		} else {
-			break
+			currNode := d.ops[currId]
+
+			// add likely edges
+			for otherId := range front {
+				if otherId == currId {
+					continue
+				}
+				otherNode := d.ops[otherId]
+				comp := d.comp(currNode.Hint, otherNode.Hint)
+
+				if comp == LikelyBefore || (comp == Unconstrained && currNode.Call < otherNode.Call) {
+					d.lDepts[currId] = append(d.lDepts[currId], otherId)
+					d.nLDeps[otherId]++
+				} else if comp == LikelyAfter || (comp == Unconstrained && currNode.Call > otherNode.Call) {
+					d.lDepts[otherId] = append(d.lDepts[otherId], currId)
+					d.nLDeps[currId]++
+				}
+			}
+			delete(front, currId)
+
+			// update candidates
+			for _, childId := range d.depts[currId] {
+				localNDeps[childId]--
+				if localNDeps[childId] == 0 {
+					candidates = append(candidates, childId)
+				}
+			}
+		}
+
+		// process candidates, update front
+		if len(candidates) > 0 {
+			for i := 0; i < len(candidates); i++ {
+				for j := i + 1; j < len(candidates); j++ {
+					id1, id2 := candidates[i], candidates[j]
+					n1, n2 := d.ops[id1], d.ops[id2]
+
+					compResult := d.comp(n1.Hint, n2.Hint)
+
+					switch compResult {
+					case HappensBefore:
+						d.depts[id1] = append(d.depts[id1], id2)
+						d.nDeps[id2]++
+						localNDeps[id2]++
+					case HappensAfter:
+						d.depts[id2] = append(d.depts[id2], id1)
+						d.nDeps[id1]++
+						localNDeps[id1]++
+					}
+				}
+			}
+			for _, cId := range candidates {
+				if localNDeps[cId] == 0 {
+					front[cId] = struct{}{}
+				}
+			}
+			candidates = candidates[:0]
+		}
+	}
+
+	d.front = make(map[int]struct{})
+	for i := 0; i < n; i++ {
+		if d.nDeps[i] == 0 {
+			d.front[i] = struct{}{}
 		}
 	}
 }
