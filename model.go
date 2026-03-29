@@ -14,8 +14,6 @@ const (
 	UnknownOp OperationKind = 3
 )
 
-type ClientId int8
-
 // An Operation is an element of a history.
 //
 // This package supports two different representations of histories, as a
@@ -27,7 +25,7 @@ type ClientId int8
 // operation with interval [10, 20] is concurrent with another operation with
 // interval [20, 30].
 type Operation struct {
-	ClientId ClientId      // optional, unless you want a visualization; zero-indexed
+	ClientId int           // optional, unless you want a visualization; zero-indexed
 	OpKind   OperationKind // read, write, rmw?
 	Input    interface{}
 	Call     int64 // invocation timestamp

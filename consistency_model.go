@@ -18,14 +18,14 @@ const (
 	HardAfter OrderKind = 2
 )
 
-type Oracle func(a *Node, b *Node) (OrderKind, error)
+type Oracle func(a *Operation, b *Operation) (OrderKind, error)
 
 type Consistency struct {
 	// e.g., linearizability; etcd revision number, etc
 	Oracles []Oracle
 }
 
-func (c *Consistency) Check(a *Node, b *Node) (OrderKind, error) {
+func (c *Consistency) Check(a *Operation, b *Operation) (OrderKind, error) {
 	ok := Unconstrained
 	for _, o := range c.Oracles {
 		order, err := o(a, b)
@@ -58,7 +58,7 @@ func (c *Consistency) Check(a *Node, b *Node) (OrderKind, error) {
 	return ok, nil
 }
 
-func GeneralLikely(a *Node, b *Node) (OrderKind, error) {
+func GeneralLikely(a *Operation, b *Operation) (OrderKind, error) {
 	if a.Call < b.Call {
 		return SoftBefore, nil
 	}
@@ -68,11 +68,11 @@ func GeneralLikely(a *Node, b *Node) (OrderKind, error) {
 	return Unconstrained, nil
 }
 
-func RealTime(a *Node, b *Node) (OrderKind, error) {
-	if a.Ret < b.Call {
+func RealTime(a *Operation, b *Operation) (OrderKind, error) {
+	if a.Return < b.Call {
 		return HardBefore, nil
 	}
-	if a.Call > b.Ret {
+	if a.Call > b.Return {
 		return HardAfter, nil
 	}
 	return Unconstrained, nil
@@ -80,7 +80,7 @@ func RealTime(a *Node, b *Node) (OrderKind, error) {
 
 var LinearizabilityOracles = []Oracle{RealTime, GeneralLikely}
 
-func RealTimeWrites(a *Node, b *Node) (OrderKind, error) {
+func RealTimeWrites(a *Operation, b *Operation) (OrderKind, error) {
 	if a.OpKind == Write && b.OpKind == Write {
 		return RealTime(a, b)
 	}

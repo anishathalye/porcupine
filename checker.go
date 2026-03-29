@@ -1,7 +1,6 @@
 package porcupine
 
 import (
-	"sort"
 	"sync/atomic"
 	"time"
 )
@@ -125,26 +124,26 @@ func (a byTime) Less(i, j int) bool {
 	return a[i].kind == callEntry && a[j].kind == returnEntry
 }
 
-func makeEntries(history OperationHistory) entries {
-	h := make([]Operation, 0)
-	for _, ops := range history {
-		for _, op := range ops {
-			h = append(h, op)
-		}
-	}
+// func makeEntries(history OperationHistory) entries {
+// 	h := make([]Operation, 0)
+// 	for _, ops := range history {
+// 		for _, op := range ops {
+// 			h = append(h, op)
+// 		}
+// 	}
 
-	var entries entries = nil
-	id := 0
-	for _, elem := range h {
-		entries = append(entries, entry{
-			callEntry, elem.Input, id, elem.Call, elem.ClientId, elem.Metadata})
-		entries = append(entries, entry{
-			returnEntry, elem.Output, id, elem.Return, elem.ClientId, elem.Metadata})
-		id++
-	}
-	sort.Sort(byTime(entries))
-	return entries
-}
+// 	var entries entries = nil
+// 	id := 0
+// 	for _, elem := range h {
+// 		entries = append(entries, entry{
+// 			callEntry, elem.Input, id, elem.Call, elem.ClientId, elem.Metadata})
+// 		entries = append(entries, entry{
+// 			returnEntry, elem.Output, id, elem.Return, elem.ClientId, elem.Metadata})
+// 		id++
+// 	}
+// 	sort.Sort(byTime(entries))
+// 	return entries
+// }
 
 type node struct {
 	value interface{}
