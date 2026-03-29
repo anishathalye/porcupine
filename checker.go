@@ -135,6 +135,7 @@ func makeEntries(history []Operation) []entry {
 			returnEntry, elem.Output, id, elem.Return, elem.ClientId, elem.Metadata, elem.Hint})
 		id++
 	}
+	// this is where we sort operations by time
 	sort.Sort(byTime(entries))
 	return entries
 }
@@ -186,6 +187,8 @@ type cacheEntry struct {
 
 func cacheContains(model Model, cache map[uint64][]cacheEntry, entry cacheEntry) bool {
 	for _, elem := range cache[entry.linearized.hash()] {
+		// cache entry is valid if bitset is the same and the state is the same. We
+		// will skip this linearization!
 		if entry.linearized.equals(elem.linearized) && model.Equal(entry.state, elem.state) {
 			return true
 		}
@@ -193,16 +196,17 @@ func cacheContains(model Model, cache map[uint64][]cacheEntry, entry cacheEntry)
 	return false
 }
 
+// takes two operations and returns the type of order
 type comparator func(a, b interface{}) OrderKind
 
 type dag struct {
-	ops    []*Node // map from id to Node
-	depts  [][]int
-	lDepts [][]int
-	nDeps  []int
-	nLDeps []int
-	front  map[int]struct{}
-	comp   comparator
+	ops    []*Node          // map from id to Node. Every operation (across clients) has a unique ID
+	depts  [][]int          // outgoing edges
+	lDepts [][]int          // likely outgoing edges
+	nDeps  []int            // number of incoming edges
+	nLDeps []int            // number of incoming likely edges
+	front  map[int]struct{} // frontier used while enumerating topological orders
+	comp   comparator       // user-provided comparator
 }
 
 func setToSlice(set map[*Node]struct{}) []int {
@@ -213,6 +217,8 @@ func setToSlice(set map[*Node]struct{}) []int {
 	return s
 }
 
+// start with a history: list of call and returns across all clients, sorted by
+// real-time
 func (d *dag) Init(history []entry, model Model) {
 	if d.comp == nil {
 		d.comp = func(a, b interface{}) OrderKind { return Unconstrained }
@@ -226,9 +232,11 @@ func (d *dag) Init(history []entry, model Model) {
 
 	for _, elem := range history {
 		if elem.kind == callEntry {
+			// create the node at call
 			node := Node{Id: elem.id, Input: elem.value, Hint: elem.hint, Call: elem.time, ClientId: elem.clientId}
 			d.ops[elem.id] = &node
 		} else {
+			// update the node at return
 			op := d.ops[elem.id]
 			op.Output = elem.value
 			op.Ret = elem.time
@@ -238,15 +246,26 @@ func (d *dag) Init(history []entry, model Model) {
 	if model.ConsistencyModel == nil {
 		model.ConsistencyModel = Linearizability
 	}
+	// pass all the nodes to the consistency model and get back the consistency
+	// model's adjacency list, i.e., system-specific order hints are not yet used
 	adj, err := model.ConsistencyModel(d.ops)
 	if err != nil {
 		panic("failed to build dag using consistency model: " + err.Error())
 	}
+
+	// local variables: total incoming edges for each node. This will increment
+	// when we "discover" new edges via order hints. This will decrement as we
+	// create frontiers and move through the DAG
 	localNDeps := make([]int, n)
 	for node, dep := range adj {
 		for other := range dep {
+			// initialize outgoing edges of each node using the adjacency list
 			d.depts[node.Id] = append(d.depts[node.Id], other.Id)
+			// initialize counts of incoming edges. This will never be decremented
+			// as we process the DAG
 			d.nDeps[other.Id]++
+			// initialize counts of incoming edges in a local variable. This *will* be
+			// decremented as we process the DAG
 			localNDeps[other.Id]++
 		}
 	}
@@ -255,6 +274,7 @@ func (d *dag) Init(history []entry, model Model) {
 	candidates := make([]int, 0, n)
 	for i := 0; i < n; i++ {
 		if localNDeps[i] == 0 {
+			// candidate set has nodes with no incoming edges
 			candidates = append(candidates, i)
 		}
 	}
@@ -374,32 +394,42 @@ func (d *dag) getOrderedFront() []int {
 	return s
 }
 
-type stackEntry struct {
-	node  *Node
-	state interface{}
-	front []int
+type stackEntry struct { // entry in the stack
+	node  *Node       // node<>operation that was pushed on the stack
+	state interface{} // state before this node was pushed on the stack
+	front []int       // frontier after this node was pushed on the stack, i.e., it does not contain the node
 }
 
 func checkSingle(model Model, history []entry, computePartial bool, kill *int32) (bool, []*[]int) {
 	d := dag{comp: model.Order}
 	d.Init(history, model)
+	// DAG is built. Now we need to find a valid topological order from this DAG
+
 	n := len(d.ops)
 	linearized := newBitset(uint(n))
 	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
 	var stack []stackEntry
 	var front []int
-	// longest linearizable prefix that includes the given entry
+	// longest linearizable prefix that includes the given entry. For debugging only
 	longest := make([]*[]int, n)
+	// get frontier from the DAG: list of nodes sorted by likely order
 	front = d.getOrderedFront()
 
 	state := model.Init()
 
+	// d.front is the actual frontier of the DAG. front is the "remaining"
+	// frontier that we still need to check.
 	for len(d.front) > 0 {
+		// kill process after timeout
 		if atomic.LoadInt32(kill) != 0 {
 			return false, longest
 		}
+		// actual frontier of the DAG is not empty, but nothing in the frontier can
+		// be linearized
 		if len(front) == 0 {
 			if len(stack) == 0 {
+				// since there is nothing left on the stack, we can't pop anything out
+				// and populate the pending frontier. Give up.
 				return false, longest
 			}
 
@@ -420,30 +450,37 @@ func checkSingle(model Model, history []entry, computePartial bool, kill *int32)
 				}
 			}
 
+			// the front is empty, pop from the stack!
 			stackTop := stack[len(stack)-1]
-			state = stackTop.state
-			linearized.clear(uint(stackTop.node.Id))
-			front = append([]int(nil), stackTop.front...)
-			stack = stack[:len(stack)-1]
-			d.unlift(stackTop.node.Id)
+			state = stackTop.state                        // recover the current state
+			linearized.clear(uint(stackTop.node.Id))      // clear from bitmap
+			front = append([]int(nil), stackTop.front...) // recover the frontier from the stack. This avoids infinite looping
+			stack = stack[:len(stack)-1]                  // pop from stack
+			d.unlift(stackTop.node.Id)                    // put the node back in the DAG
 			continue
 		}
-		opId := front[len(front)-1]
-		op := d.ops[opId]
-		front = front[:len(front)-1]
 
-		ok, newState := model.Step(state, op.Input, op.Output)
+		// there is something in the pending frontier.
+		opId := front[len(front)-1] // take the last operation, since it was sorted by likely orders
+		op := d.ops[opId]
+		front = front[:len(front)-1] // remove it from the pending frontier
+
+		ok, newState := model.Step(state, op.Input, op.Output) // find new state
 		if ok {
-			newLinearized := linearized.clone().set(uint(op.Id))
-			newCacheEntry := cacheEntry{newLinearized, newState}
+			// push only if it was allowed by the sequential specification
+			newLinearized := linearized.clone().set(uint(op.Id)) // add to bit set
+			newCacheEntry := cacheEntry{newLinearized, newState} //
 			if !cacheContains(model, cache, newCacheEntry) {
 				hash := newLinearized.hash()
 				cache[hash] = append(cache[hash], newCacheEntry)
-				stack = append(stack, stackEntry{op, state, append([]int{}, front...)})
-				d.lift(op.Id)
-				front = d.getOrderedFront()
-				state = newState
+				stack = append(stack, stackEntry{op, state, append([]int{}, front...)}) // push to the stack
+				d.lift(op.Id)                                                           // remove from the DAG. this will update the frontier of the DAG
+				front = d.getOrderedFront()                                             // get the new pending frontier
+				state = newState                                                        // update state
 				linearized.set(uint(op.Id))
+			} else {
+				// skip checking this order because we already checked another
+				// "equivalent" order
 			}
 		}
 	}
