@@ -17,9 +17,9 @@ func newClientOperation(op Operation, numClients int) ClientOperation {
 }
 
 type client struct {
-	id   ClientId
-	ops  []ClientOperation // operations by this client
-	head OperationIdx      // head is not pushed to the stack yet
+	id     ClientId
+	cltOps []ClientOperation // operations by this client
+	head   OperationIdx      // head is not pushed to the stack yet
 }
 
 type chains struct {
@@ -30,9 +30,9 @@ type chains struct {
 func newChains(clients []client, consistency Consistency) chains {
 	numClients := len(clients)
 	for i := 0; i < numClients; i++ {
-		i_op := clients[i].ops[0]
+		i_op := clients[i].cltOps[0]
 		for j := i + 1; j < numClients; j++ {
-			j_op := clients[j].ops[0]
+			j_op := clients[j].cltOps[0]
 			order, err := consistency.Check(&i_op.op, &j_op.op)
 			if err != nil {
 				panic(err)
@@ -50,7 +50,7 @@ func newChains(clients []client, consistency Consistency) chains {
 	for i := 0; i < numClients; i++ {
 		blocked := false
 		for j := 0; j < numClients; j++ {
-			if i != j && clients[j].head < clients[i].ops[0].start[j] {
+			if i != j && clients[j].head < clients[i].cltOps[0].start[j] {
 				blocked = true
 				break
 			}
@@ -64,24 +64,24 @@ func newChains(clients []client, consistency Consistency) chains {
 }
 
 type stackEntry struct { // entry in the stack
-	operation Operation    // operation has ClientID in it. This operation was pushed on the stack
-	state     interface{}  // state before this node was pushed on the stack
-	opIdx     OperationIdx // index of the operation in the client's history
+	cltOp ClientOperation // operation has ClientID in it. This operation was pushed on the stack
+	state interface{}     // state before this node was pushed on the stack
+	opIdx OperationIdx    // index of the operation in the client's history
 	// frontier  []int        // frontier after this node was pushed on the stack, i.e., it does not contain the node
 }
 
 func (c *client) lift(model Model, oldState interface{}, stack []stackEntry) (interface{}, bool) {
 	// Is this allowed by the sequential specification?
-	op := c.ops[c.head].op
-	ok, newState := model.Step(oldState, op.Input, op.Output)
+	cltOp := c.cltOps[c.head]
+	ok, newState := model.Step(oldState, cltOp.op.Input, cltOp.op.Output)
 	if !ok {
 		return newState, ok
 	}
 
 	e := stackEntry{
-		operation: op,
-		state:     oldState,
-		opIdx:     c.head,
+		cltOp: cltOp,
+		state: oldState,
+		opIdx: c.head,
 	}
 	stack = append(stack, e)
 	c.head++
@@ -89,7 +89,7 @@ func (c *client) lift(model Model, oldState interface{}, stack []stackEntry) (in
 }
 
 func (c *client) unlift(top stackEntry) {
-	if c.id != ClientId(top.operation.ClientId) {
+	if c.id != ClientId(top.cltOp.op.ClientId) {
 		panic("Tried to unlift someone else's operation")
 	}
 	c.head--
@@ -100,29 +100,31 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 	for len(ch.frontier) != 0 {
 		// Keep on trying to lift until we have exhausted the frontier
 		for _, i := range ch.frontier {
-			i_op := ch.clients[i].ops[ch.clients[i].head]
+			i_op := ch.clients[i].cltOps[ch.clients[i].head]
 			canLift := true
-			// Is this allowed by the consistency order
+
+			// Is this allowed by the consistency order? Check with all other clients
 			var j ClientId
 			for j = 0; j < ClientId(numClients); j++ {
 				if i == j || ch.clients[j].head == 0 {
 					continue
 				}
-				j_op := ch.clients[j].ops[ch.clients[j].head-1]
+				j_op := ch.clients[j].cltOps[ch.clients[j].head-1]
 
 				order, err := consistency.Check(&i_op.op, &j_op.op)
 				if err != nil {
 					panic(err)
 				}
 				if order == HardBefore {
-					// i happened before j. Pop the stack till j
+					// i happened before j. Pop the stack till j comes out
 					for true {
 						top := ch.unlift(stack)
 						oldState = top.state
-						if ClientId(top.operation.ClientId) == j {
+						if ClientId(top.cltOp.op.ClientId) == j {
+							top.cltOp.start[i] = ch.clients[i].head // update start
 							break
 						}
-						if ClientId(top.operation.ClientId) == i {
+						if ClientId(top.cltOp.op.ClientId) == i {
 							canLift = false
 						}
 					}
@@ -145,9 +147,9 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 
 func (ch *chains) unlift(stack []stackEntry) stackEntry {
 	top := stack[len(stack)-1]
-	client := ch.clients[top.operation.ClientId]
+	client := ch.clients[top.cltOp.op.ClientId]
 	client.unlift(top)
-	ch.update(ClientId(top.operation.ClientId))
+	ch.update(ClientId(top.cltOp.op.ClientId))
 	stack = stack[:len(stack)-1]
 	return top
 }
@@ -179,9 +181,9 @@ func checkOperations(model Model, consistency Consistency, history [][]Operation
 			clientOps = append(clientOps, newClientOperation(op, numClients))
 		}
 		ch.clients = append(ch.clients, client{
-			id:   ClientId(i),
-			ops:  clientOps,
-			head: 0,
+			id:     ClientId(i),
+			cltOps: clientOps,
+			head:   0,
 		})
 	}
 
@@ -202,9 +204,9 @@ func checkOperations(model Model, consistency Consistency, history [][]Operation
 		// try serializing an op from front
 		for _, cIdx := range front {
 			c := ch.clients[cIdx]
-			op := c.ops[c.head]
+			op := c.cltOps[c.head]
 			stackTop := stack[len(stack)-1]
-			comp, err := consistency.Check(&stackTop.operation, &op)
+			comp, err := consistency.Check(&stackTop.cltOp, &op)
 			if err != nil {
 				panic("Error in consistency check: " + err.Error())
 			}
@@ -230,9 +232,9 @@ func checkOperations(model Model, consistency Consistency, history [][]Operation
 				stack = stack[:len(stack)-1]
 				state = c.unlift(stackTop)
 				// update start of stackTop
-				ch.clients[stackTop.operation.ClientId].start[stackTop.opIdx][cIdx] = c.head
+				ch.clients[stackTop.cltOp.ClientId].start[stackTop.opIdx][cIdx] = c.head
 				stackTop = stack[len(stack)-1]
-				comp, err = consistency.Check(&stackTop.operation, &op)
+				comp, err = consistency.Check(&stackTop.cltOp, &op)
 				if err != nil {
 					panic("Error in consistency check: " + err.Error())
 				}
@@ -246,7 +248,7 @@ func checkOperations(model Model, consistency Consistency, history [][]Operation
 			}
 			// pop from stack
 			stackTop := stack[len(stack)-1]
-			cId := stackTop.operation.ClientId
+			cId := stackTop.cltOp.ClientId
 			ch.clients[cId].unlift(stackTop)
 			stack = stack[:len(stack)-1]
 			state = stackTop.state
