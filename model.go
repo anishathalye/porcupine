@@ -5,6 +5,14 @@ import (
 	"strings"
 )
 
+type OperationKind int
+
+const (
+	Read  OperationKind = 0
+	Write OperationKind = 1
+	RMW   OperationKind = 2
+)
+
 // An Operation is an element of a history.
 //
 // This package supports two different representations of histories, as a
@@ -16,7 +24,8 @@ import (
 // operation with interval [10, 20] is concurrent with another operation with
 // interval [20, 30].
 type Operation struct {
-	ClientId int // optional, unless you want a visualization; zero-indexed
+	ClientId int           // optional, unless you want a visualization; zero-indexed
+	Kind     OperationKind // read, write, rmw?
 	Input    interface{}
 	Call     int64 // invocation timestamp
 	Output   interface{}
@@ -67,6 +76,7 @@ const (
 type Event struct {
 	ClientId int // optional, unless you want a visualization; zero-indexed
 	Kind     EventKind
+	OpKind   OperationKind
 	Value    interface{}
 	Id       int
 	// Metadata contains arbitrary metadata associated with the operation.
@@ -77,26 +87,11 @@ type Event struct {
 	_        struct{} // disallow positional literals, for extensibility
 }
 
-// OrderKind represents the kind of precedence relationship between two operations
-type OrderKind int
-
-const (
-	// Indicates that event a should be strictly ordered before event b.
-	HappensBefore OrderKind = -2
-	// Indicates that event a should likely be ordered before event b.
-	LikelyBefore OrderKind = -1
-	// Indicates that there is no information about the relative order of operations a and b.
-	Unconstrained OrderKind = 0
-	// Indicates that event a should likely be ordered after event b.
-	LikelyAfter OrderKind = 1
-	// Indicates that event a should be strictly ordered after event b.
-	HappensAfter OrderKind = 2
-)
-
 // A node in the DAG
 type Node struct {
 	Id       int
 	ClientId int
+	OpKind   OperationKind
 	Input    interface{}
 	Output   interface{}
 	Hint     interface{}
@@ -153,13 +148,7 @@ type Model struct {
 	// For visualization purposes, describe metadata as a string. Can be
 	// omitted if you're not producing visualizations.
 	DescribeOperationMetadata func(info interface{}) string
-	// The consistency model to be checked. Returns a DAG defining the
-	// order between nodes representing operations.
-	ConsistencyModel func(nodes []*Node) (map[*Node]map[*Node]struct{}, error)
-	// To compare hints. If left nil, hints are ignored. Returns a PrecKind
-	// indicating the precedence relationship between events.
-	Order func(a interface{}, b interface{}) OrderKind
-	_     struct{} // disallow positional literals, for extensibility
+	_                         struct{} // disallow positional literals, for extensibility
 }
 
 // A NondeterministicModel is a nondeterministic sequential specification of a

@@ -298,10 +298,10 @@ func (d *dag) Init(history []entry, model Model) {
 				otherNode := d.ops[otherId]
 				comp := d.comp(currNode.Hint, otherNode.Hint)
 
-				if comp == LikelyBefore || (comp == Unconstrained && currNode.Call < otherNode.Call) {
+				if comp == SoftBefore || (comp == Unconstrained && currNode.Call < otherNode.Call) {
 					d.lDepts[currId] = append(d.lDepts[currId], otherId)
 					d.nLDeps[otherId]++
-				} else if comp == LikelyAfter || (comp == Unconstrained && currNode.Call > otherNode.Call) {
+				} else if comp == SoftAfter || (comp == Unconstrained && currNode.Call > otherNode.Call) {
 					d.lDepts[otherId] = append(d.lDepts[otherId], currId)
 					d.nLDeps[currId]++
 				}
@@ -327,11 +327,11 @@ func (d *dag) Init(history []entry, model Model) {
 					compResult := d.comp(n1.Hint, n2.Hint)
 
 					switch compResult {
-					case HappensBefore:
+					case HardBefore:
 						d.depts[id1] = append(d.depts[id1], id2)
 						d.nDeps[id2]++
 						localNDeps[id2]++
-					case HappensAfter:
+					case HardAfter:
 						d.depts[id2] = append(d.depts[id2], id1)
 						d.nDeps[id1]++
 						localNDeps[id1]++
