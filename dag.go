@@ -135,7 +135,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 			// I am ready to lift this operation!
 			newState, success := ch.clients[i].lift(model, oldState, stack)
 			if success {
-				// update my frontier
+				ch.update(i)
 				return newState, success
 			}
 		}
@@ -146,10 +146,14 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 func (ch *chains) unlift(stack []stackEntry) stackEntry {
 	top := stack[len(stack)-1]
 	client := ch.clients[top.operation.ClientId]
-	// TODO: Update frontier
 	client.unlift(top)
+	ch.update(ClientId(top.operation.ClientId))
 	stack = stack[:len(stack)-1]
 	return top
+}
+
+func (ch *chains) update(i ClientId) {
+
 }
 
 // func (d *dag) getOrderedFront() []int {
