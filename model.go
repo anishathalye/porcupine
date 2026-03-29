@@ -8,10 +8,13 @@ import (
 type OperationKind int
 
 const (
-	Read  OperationKind = 0
-	Write OperationKind = 1
-	RMW   OperationKind = 2
+	Read      OperationKind = 0
+	Write     OperationKind = 1
+	RMW       OperationKind = 2
+	UnknownOp OperationKind = 3
 )
+
+type ClientId int8
 
 // An Operation is an element of a history.
 //
@@ -24,17 +27,17 @@ const (
 // operation with interval [10, 20] is concurrent with another operation with
 // interval [20, 30].
 type Operation struct {
-	ClientId int           // optional, unless you want a visualization; zero-indexed
-	Kind     OperationKind // read, write, rmw?
+	ClientId ClientId      // optional, unless you want a visualization; zero-indexed
+	OpKind   OperationKind // read, write, rmw?
 	Input    interface{}
 	Call     int64 // invocation timestamp
 	Output   interface{}
 	Return   int64 // response timestamp
 	// Metadata contains arbitrary metadata associated with the operation.
 	// It is not used for linearizability checking but can be used for visualization.
-	Metadata interface{}
-	Hint     interface{}
-	_        struct{} // disallow positional literals, for extensibility
+	Metadata  interface{}
+	OrderHint interface{}
+	_         struct{} // disallow positional literals, for extensibility
 }
 
 // Interpreting the interval [Call, Return] as a closed interval is the only
@@ -87,18 +90,6 @@ type Event struct {
 	_        struct{} // disallow positional literals, for extensibility
 }
 
-// A node in the DAG
-type Node struct {
-	Id       int
-	ClientId int
-	OpKind   OperationKind
-	Input    interface{}
-	Output   interface{}
-	Hint     interface{}
-	Call     int64
-	Ret      int64
-}
-
 // A Model is a sequential specification of a system.
 //
 // Note: models in this package are expected to be purely functional. That is,
@@ -125,8 +116,8 @@ type Model struct {
 	// Partition functions, such that a history is linearizable if and only
 	// if each partition is linearizable. If left nil, this package will
 	// skip partitioning.
-	Partition      func(history []Operation) [][]Operation
-	PartitionEvent func(history []Event) [][]Event
+	Partition      func(history OperationHistory) []OperationHistory
+	PartitionEvent func(history EventHistory) []EventHistory
 	// Initial state of the system.
 	Init func() interface{}
 	// Step function for the system. Returns whether or not the system
@@ -167,8 +158,8 @@ type NondeterministicModel struct {
 	// Partition functions, such that a history is linearizable if and only
 	// if each partition is linearizable. If left nil, this package will
 	// skip partitioning.
-	Partition      func(history []Operation) [][]Operation
-	PartitionEvent func(history []Event) [][]Event
+	Partition      func(history OperationHistory) []OperationHistory
+	PartitionEvent func(history EventHistory) []EventHistory
 	// Initial states of the system.
 	Init func() []interface{}
 	// Step function for the system. Returns all possible next states for
@@ -289,14 +280,14 @@ func (nm *NondeterministicModel) ToModel() Model {
 
 // noPartition is a fallback partition function that partitions the history
 // into a single partition containing all of the operations.
-func noPartition(history []Operation) [][]Operation {
-	return [][]Operation{history}
+func noPartition(history OperationHistory) []OperationHistory {
+	return []OperationHistory{history}
 }
 
 // noPartitionEvent is a fallback partition function that partitions the
 // history into a single partition containing all of the events.
-func noPartitionEvent(history []Event) [][]Event {
-	return [][]Event{history}
+func noPartitionEvent(history EventHistory) []EventHistory {
+	return []EventHistory{history}
 }
 
 // shallowEqual is a fallback equality function that compares two states using

@@ -23,16 +23,16 @@ func visualizeTempFile(t *testing.T, model Model, info LinearizationInfo) {
 }
 
 func TestVisualizationMultipleLengths(t *testing.T) {
-	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10},
-		{ClientId: 2, Input: kvInput{op: 1, key: "x", value: "z"}, Call: 0, Output: kvOutput{}, Return: 10},
-		{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 20, Output: kvOutput{"y"}, Return: 30},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "w"}, Call: 35, Output: kvOutput{}, Return: 45},
-		{ClientId: 5, Input: kvInput{op: 0, key: "x"}, Call: 25, Output: kvOutput{"z"}, Return: 35},
-		{ClientId: 3, Input: kvInput{op: 0, key: "x"}, Call: 30, Output: kvOutput{"y"}, Return: 40},
-		{ClientId: 4, Input: kvInput{op: 0, key: "y"}, Call: 50, Output: kvOutput{"a"}, Return: 90},
-		{ClientId: 2, Input: kvInput{op: 1, key: "y", value: "a"}, Call: 55, Output: kvOutput{}, Return: 85},
+	ops := OperationHistory{
+		{{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100}},
+		{{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10},
+			{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 20, Output: kvOutput{"y"}, Return: 30},
+			{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "w"}, Call: 35, Output: kvOutput{}, Return: 45}},
+		{{ClientId: 2, Input: kvInput{op: 1, key: "x", value: "z"}, Call: 0, Output: kvOutput{}, Return: 10},
+			{ClientId: 2, Input: kvInput{op: 1, key: "y", value: "a"}, Call: 55, Output: kvOutput{}, Return: 85}},
+		{{ClientId: 3, Input: kvInput{op: 0, key: "x"}, Call: 30, Output: kvOutput{"y"}, Return: 40}},
+		{{ClientId: 4, Input: kvInput{op: 0, key: "y"}, Call: 50, Output: kvOutput{"a"}, Return: 90}},
+		{{ClientId: 5, Input: kvInput{op: 0, key: "x"}, Call: 25, Output: kvOutput{"z"}, Return: 35}},
 	}
 	res, info := CheckOperationsVerbose(kvModel, ops, 0)
 	if res != Illegal {
@@ -134,16 +134,16 @@ func TestVisualizationLarge(t *testing.T) {
 
 func TestVisualizationAnnotations(t *testing.T) {
 	// base set of operations same as TestVisualizationMultipleLengths
-	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10},
-		{ClientId: 2, Input: kvInput{op: 1, key: "x", value: "z"}, Call: 0, Output: kvOutput{}, Return: 10},
-		{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 20, Output: kvOutput{"y"}, Return: 30},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "w"}, Call: 35, Output: kvOutput{}, Return: 45},
-		{ClientId: 5, Input: kvInput{op: 0, key: "x"}, Call: 25, Output: kvOutput{"z"}, Return: 35},
-		{ClientId: 3, Input: kvInput{op: 0, key: "x"}, Call: 30, Output: kvOutput{"y"}, Return: 40},
-		{ClientId: 4, Input: kvInput{op: 0, key: "y"}, Call: 50, Output: kvOutput{"a"}, Return: 90},
-		{ClientId: 2, Input: kvInput{op: 1, key: "y", value: "a"}, Call: 55, Output: kvOutput{}, Return: 85},
+	ops := OperationHistory{
+		{{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100}},
+		{{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10},
+			{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 20, Output: kvOutput{"y"}, Return: 30},
+			{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "w"}, Call: 35, Output: kvOutput{}, Return: 45}},
+		{{ClientId: 2, Input: kvInput{op: 1, key: "x", value: "z"}, Call: 0, Output: kvOutput{}, Return: 10},
+			{ClientId: 2, Input: kvInput{op: 1, key: "y", value: "a"}, Call: 55, Output: kvOutput{}, Return: 85}},
+		{{ClientId: 3, Input: kvInput{op: 0, key: "x"}, Call: 30, Output: kvOutput{"y"}, Return: 40}},
+		{{ClientId: 4, Input: kvInput{op: 0, key: "y"}, Call: 50, Output: kvOutput{"a"}, Return: 90}},
+		{{ClientId: 5, Input: kvInput{op: 0, key: "x"}, Call: 25, Output: kvOutput{"z"}, Return: 35}},
 	}
 	res, info := CheckOperationsVerbose(kvModel, ops, 0)
 	annotations := []Annotation{
@@ -169,9 +169,9 @@ func TestVisualizationAnnotations(t *testing.T) {
 }
 
 func TestVisualizePointInTimeAnnotationsEnd(t *testing.T) {
-	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 50, Output: kvOutput{}, Return: 60},
+	ops := OperationHistory{
+		{{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100}},
+		{{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 50, Output: kvOutput{}, Return: 60}},
 	}
 	res, info := CheckOperationsVerbose(kvModel, ops, 0)
 	if res != Illegal {
@@ -189,9 +189,9 @@ func TestVisualizePointInTimeAnnotationsEnd(t *testing.T) {
 }
 
 func TestVisualizeMatchingStartEnd(t *testing.T) {
-	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 50},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 50, Output: kvOutput{}, Return: 80},
+	ops := OperationHistory{
+		{{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 50}},
+		{{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 50, Output: kvOutput{}, Return: 80}},
 	}
 	res, info := CheckOperationsVerbose(kvModel, ops, 0)
 	if res != Illegal {
@@ -220,15 +220,15 @@ func TestVisualizeAnnotationsNoEvents(t *testing.T) {
 func TestVisualizationCallAndReturnTime(t *testing.T) {
 	tests := []struct {
 		name           string
-		ops            []Operation
+		ops            OperationHistory
 		expectedRes    CheckResult
 		expectedStarts []string
 		expectedEnds   []string
 	}{
 		{
 			name: "LinearizableContent",
-			ops: []Operation{
-				{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100},
+			ops: OperationHistory{
+				{{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100}},
 			},
 			expectedRes:    Ok, // CheckOperationsVerbose returns Ok for linearizable
 			expectedStarts: []string{`"OriginalStart":"0"`},
@@ -236,9 +236,9 @@ func TestVisualizationCallAndReturnTime(t *testing.T) {
 		},
 		{
 			name: "NotLinearizedSingleIllegal",
-			ops: []Operation{
-				{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100},
-				{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 10, Output: kvOutput{"b"}, Return: 110}, // not linearizable
+			ops: OperationHistory{
+				{{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100}},
+				{{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 10, Output: kvOutput{"b"}, Return: 110}}, // not linearizable
 			},
 			expectedRes:    Illegal,
 			expectedStarts: []string{`"OriginalStart":"0"`, `"OriginalStart":"10"`},
@@ -246,10 +246,10 @@ func TestVisualizationCallAndReturnTime(t *testing.T) {
 		},
 		{
 			name: "NotPartiallyLinearized",
-			ops: []Operation{
-				{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100},
-				{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 10, Output: kvOutput{"b"}, Return: 110}, // not linearizable
-				{ClientId: 2, Input: kvInput{op: 0, key: "x"}, Call: 120, Output: kvOutput{"a"}, Return: 130},
+			ops: OperationHistory{
+				{{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 100}},
+				{{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 10, Output: kvOutput{"b"}, Return: 110}}, // not linearizable
+				{{ClientId: 2, Input: kvInput{op: 0, key: "x"}, Call: 120, Output: kvOutput{"a"}, Return: 130}},
 			},
 			expectedRes:    Illegal,
 			expectedStarts: []string{`"OriginalStart":"0"`, `"OriginalStart":"10"`, `"OriginalStart":"120"`},
@@ -302,8 +302,8 @@ func TestVisualizationStringMetadata(t *testing.T) {
 		return fmt.Sprintf("custom: %v", info)
 	}
 
-	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100, Metadata: "meta1"},
+	ops := OperationHistory{
+		{{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100, Metadata: "meta1"}},
 	}
 	_, info := CheckOperationsVerbose(model, ops, 0)
 
@@ -358,9 +358,9 @@ type customMetadata struct {
 }
 
 func TestVisualizationStructMetadata(t *testing.T) {
-	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100, Metadata: customMetadata{1, "meta1"}},
-		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10, Metadata: customMetadata{2, "meta2"}},
+	ops := OperationHistory{
+		{{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 0, Output: kvOutput{"w"}, Return: 100, Metadata: customMetadata{1, "meta1"}}},
+		{{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10, Metadata: customMetadata{2, "meta2"}}},
 	}
 
 	// Define a model that handles custom metadata
@@ -428,9 +428,9 @@ func TestVisualizationStructMetadata(t *testing.T) {
 }
 
 func TestVisualizationMetadataAlwaysVisible(t *testing.T) {
-	ops := []Operation{
-		{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "val"}, Call: 0, Output: kvOutput{}, Return: 100, Metadata: "meta_linearizable"},
-		{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 5, Output: kvOutput{"invalid"}, Return: 10, Metadata: "meta_not_linearizable"},
+	ops := OperationHistory{
+		{{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "val"}, Call: 0, Output: kvOutput{}, Return: 100, Metadata: "meta_linearizable"}},
+		{{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 5, Output: kvOutput{"invalid"}, Return: 10, Metadata: "meta_not_linearizable"}},
 	}
 
 	_, info := CheckOperationsVerbose(kvModel, ops, 0)
