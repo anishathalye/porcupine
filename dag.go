@@ -5,53 +5,77 @@ import (
 )
 
 type ClientId int
-type OperationIdx int32
+type OperationIdx int
+
+type ClientOperation struct {
+	op    Operation
+	start []OperationIdx // start[c] is the index of the first operation from client c that has no outgoing dependency to this op
+}
+
+func newClientOperation(op Operation, numClients int) ClientOperation {
+	return ClientOperation{op: op, start: make([]OperationIdx, numClients)}
+}
 
 type client struct {
-	id    ClientId
-	ops   []Operation      // operations by this client
-	head  OperationIdx     // head is not pushed to the stack yet
-	start [][]OperationIdx // start[i][c] is the index of the first operation from client c that has no outgoing dependency to op i
+	id   ClientId
+	ops  []ClientOperation // operations by this client
+	head OperationIdx      // head is not pushed to the stack yet
 }
 
 type chains struct {
-	clients []client
-	// frontier []int // The head of these clients are in the frontier
+	clients  []client
+	frontier []ClientId // The head of these clients are in the frontier. Sorted by which client should be serialized first.
 }
 
-// A node in the DAG
-// type Node struct {
-// 	Id       int
-// 	ClientId int
-// 	OpKind   OperationKind
-// 	Input    interface{}
-// 	Output   interface{}
-// 	Hint     interface{}
-// 	Call     int64
-// 	Ret      int64
-// }
+func newChains(clients []client, consistency Consistency) chains {
+	numClients := len(clients)
+	for i := 0; i < numClients; i++ {
+		i_op := clients[i].ops[0]
+		for j := i + 1; j < numClients; j++ {
+			j_op := clients[j].ops[0]
+			order, err := consistency.Check(&i_op.op, &j_op.op)
+			if err != nil {
+				panic(err)
+			}
+			switch order {
+			case HardBefore:
+				j_op.start[i] = 1
+			case HardAfter:
+				i_op.start[j] = 1
+			}
+		}
+	}
 
-// type dag struct {
-// 	ops    []*Node          // map from id to Node. Every operation (across clients) has a unique ID
-// 	depts  [][]int          // outgoing edges
-// 	lDepts [][]int          // likely outgoing edges
-// 	nDeps  []int            // number of incoming edges
-// 	nLDeps []int            // number of incoming likely edges
-// 	front  map[int]struct{} // frontier used while enumerating topological orders
-// }
+	frontier := []ClientId{}
+	for i := 0; i < numClients; i++ {
+		blocked := false
+		for j := 0; j < numClients; j++ {
+			if i != j && clients[j].head < clients[i].ops[0].start[j] {
+				blocked = true
+				break
+			}
+		}
+		if !blocked {
+			frontier = append(frontier, ClientId(i))
+		}
+	}
+
+	return chains{clients: clients, frontier: frontier}
+}
 
 type stackEntry struct { // entry in the stack
 	operation Operation    // operation has ClientID in it. This operation was pushed on the stack
 	state     interface{}  // state before this node was pushed on the stack
 	opIdx     OperationIdx // index of the operation in the client's history
-	// front     []int       // frontier after this node was pushed on the stack, i.e., it does not contain the node
+	// frontier  []int        // frontier after this node was pushed on the stack, i.e., it does not contain the node
 }
 
-func (c *client) lift(model Model, oldState interface{}) (stackEntry, interface{}, bool) {
-	op := c.ops[c.head]
+func (c *client) lift(model Model, oldState interface{}, stack []stackEntry) (interface{}, bool) {
+	// Is this allowed by the sequential specification?
+	op := c.ops[c.head].op
 	ok, newState := model.Step(oldState, op.Input, op.Output)
 	if !ok {
-		return stackEntry{}, newState, ok
+		return newState, ok
 	}
 
 	e := stackEntry{
@@ -59,67 +83,73 @@ func (c *client) lift(model Model, oldState interface{}) (stackEntry, interface{
 		state:     oldState,
 		opIdx:     c.head,
 	}
+	stack = append(stack, e)
 	c.head++
-	return e, newState, ok
+	return newState, ok
 }
 
-func (c *client) unlift(top stackEntry) interface{} {
+func (c *client) unlift(top stackEntry) {
 	if c.id != ClientId(top.operation.ClientId) {
 		panic("Tried to unlift someone else's operation")
 	}
 	c.head--
-	return top.state
-
 }
 
-func (ch *chains) lift(model Model, oldState interface{}) (stackEntry, interface{}, bool) {
-	// delete(d.front, id)
-	// for _, dept := range d.depts[id] {
-	// 	d.nDeps[dept]--
-	// 	if d.nDeps[dept] == 0 {
-	// 		d.front[dept] = struct{}{}
-	// 	}
-	// }
-	// for _, dept := range d.lDepts[id] {
-	// 	d.nLDeps[dept]--
-	// }
-	return stackEntry{}, nil, true
-}
+func (ch *chains) lift(model Model, consistency Consistency, oldState interface{}, stack []stackEntry) (interface{}, bool) {
+	numClients := len(ch.clients)
+	for len(ch.frontier) != 0 {
+		// Keep on trying to lift until we have exhausted the frontier
+		for _, i := range ch.frontier {
+			i_op := ch.clients[i].ops[ch.clients[i].head]
+			canLift := true
+			// Is this allowed by the consistency order
+			var j ClientId
+			for j = 0; j < ClientId(numClients); j++ {
+				if i == j || ch.clients[j].head == 0 {
+					continue
+				}
+				j_op := ch.clients[j].ops[ch.clients[j].head-1]
 
-// TODO: sort by likely order, update start
-func (ch *chains) getFront() []int {
-	front := []int{}
-	for _, c := range ch.clients {
-		if c.head >= OperationIdx(len(c.ops)) {
-			continue
-		}
-		blocked := false
-		for _, other := range ch.clients {
-			// c is blocked until other.head >= c.start[c.head][other.id]
-			if c.id != other.id && other.head < c.start[c.head][other.id] {
-				blocked = true
+				order, err := consistency.Check(&i_op.op, &j_op.op)
+				if err != nil {
+					panic(err)
+				}
+				if order == HardBefore {
+					// i happened before j. Pop the stack till j
+					for true {
+						top := ch.unlift(stack)
+						oldState = top.state
+						if ClientId(top.operation.ClientId) == j {
+							break
+						}
+						if ClientId(top.operation.ClientId) == i {
+							canLift = false
+						}
+					}
+				}
+			}
+
+			if !canLift {
 				break
 			}
-		}
-		if !blocked {
-			front = append(front, int(c.id))
+			// I am ready to lift this operation!
+			newState, success := ch.clients[i].lift(model, oldState, stack)
+			if success {
+				// update my frontier
+				return newState, success
+			}
 		}
 	}
-	return front
+	return nil, false
 }
 
-func (ch *chains) unlift(top stackEntry) interface{} {
-	// for _, dept := range d.depts[id] {
-	// 	if d.nDeps[dept] == 0 {
-	// 		delete(d.front, dept)
-	// 	}
-	// 	d.nDeps[dept]++
-	// }
-	// d.front[id] = struct{}{}
-	// for _, dept := range d.lDepts[id] {
-	// 	d.nLDeps[dept]++
-	// }
-	return nil
+func (ch *chains) unlift(stack []stackEntry) stackEntry {
+	top := stack[len(stack)-1]
+	client := ch.clients[top.operation.ClientId]
+	// TODO: Update frontier
+	client.unlift(top)
+	stack = stack[:len(stack)-1]
+	return top
 }
 
 // func (d *dag) getOrderedFront() []int {
@@ -136,49 +166,29 @@ func (ch *chains) unlift(top stackEntry) interface{} {
 // }
 
 func checkOperations(model Model, consistency Consistency, history [][]Operation, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
+	// Initialize chains
 	ch := &chains{}
+	numClients := len(history)
+	for i, c := range history {
+		clientOps := make([]ClientOperation, 0)
+		for _, op := range c {
+			clientOps = append(clientOps, newClientOperation(op, numClients))
+		}
+		ch.clients = append(ch.clients, client{
+			id:   ClientId(i),
+			ops:  clientOps,
+			head: 0,
+		})
+	}
+
+	// Initialize cache
 	n := 0
 	for _, c := range history {
 		n += len(c)
 	}
-
-	// create global id for operations
-	globalIdMap := make([][]int, len(history))
-	idCounter := 0
-	for i, c := range history {
-		globalIdMap[i] = make([]int, len(c))
-		for j := range c {
-			globalIdMap[i][j] = idCounter
-			idCounter++
-		}
-
-		start := make([][]OperationIdx, len(c))
-		for k := range start {
-			start[k] = make([]OperationIdx, len(history))
-			// Pre-calculate real-time dependencies
-			for otherId, otherOps := range history {
-				if i == otherId {
-					continue
-				}
-				for m, otherOp := range otherOps {
-					if otherOp.Return < c[k].Call {
-						start[k][otherId] = OperationIdx(m + 1)
-					} else {
-						break
-					}
-				}
-			}
-		}
-		ch.clients = append(ch.clients, client{
-			id:    ClientId(i),
-			ops:   c,
-			head:  0,
-			start: start,
-		})
-	}
-
 	linearized := newBitset(uint(n))
 	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
+
 	front := ch.getFront()
 	stack := []stackEntry{}
 	state := model.Init()
