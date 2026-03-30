@@ -152,28 +152,31 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 				}
 				if order == HardBefore {
 					updated = true
+					canLift = false
 					// i happened before j. Pop the stack till j comes out
-					for true {
+					for len(*stack) > 0 {
 						top := ch.unlift(stack, serialized)
 						oldState = top.state
 						if ClientId(top.cltOp.op.ClientId) == j {
-							top.cltOp.start[i] = ch.clients[i].head + 1 // update start
+							top.cltOp.start[i] = ch.clients[i].head + 1
+							ch.update(j)
 							break
 						}
-						if ClientId(top.cltOp.op.ClientId) == i {
-							canLift = false
-						}
 					}
+					break
 				}
 			}
 
 			if !canLift {
-				break
+				if updated {
+					break
+				}
+				continue
 			}
+
 			// I am ready to lift this operation!
 			newState, success := ch.clients[i].lift(model, oldState, stack, cache, serialized)
 			if success {
-				updated = true
 				ch.update(i)
 				return newState, success
 			}
@@ -195,16 +198,7 @@ func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset) stackEntry {
 }
 
 func (ch *chains) update(i ClientId) {
-	// Rebuild the entire frontier: check ALL clients for eligibility,
-	// not just the ones previously in the frontier. When client i's head
-	// changes, previously-blocked clients may become unblocked.
-	inFrontier := make(map[ClientId]bool)
-	for _, j := range ch.frontier {
-		if j != i {
-			inFrontier[j] = true
-		}
-	}
-
+	// Rebuild the entire frontier for now
 	frontier := []ClientId{}
 	for j := 0; j < len(ch.clients); j++ {
 		jId := ClientId(j)
@@ -245,7 +239,7 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 
 	// while all operations are not serialized, explore permutations
 	for !isComplete {
-		// try serializing an operations from frontier
+		// try serializing an operation from frontier
 		newState, ok := ch.lift(model, consistency, state, &stack, cache, &serialized)
 		if ok {
 			state = newState
