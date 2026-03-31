@@ -14,11 +14,12 @@ type client struct {
 	id     int
 	cltOps []clientOperation // operations by this client
 	head   int               // head is not pushed to the stack yet
+	nDeps  int               // number of incoming dependencies of the head
 }
 
 type chains struct {
 	clients  []client
-	frontier []int // The head of these clients are in the frontier. Sorted by which client's head should be serialized first.
+	frontier map[int]struct{} // The head of these clients are in the frontier.
 	numOps   int
 }
 
@@ -50,13 +51,10 @@ func newChains(history [][]Operation, consistency Consistency) chains {
 		}
 	}
 
-	// notInFrontier[i] is true if the head of client i is not in the frontier
-	notInFrontier := make([]bool, numClients)
 
 	// Check consistency order and build the initial frontier
 	for i := 0; i < numClients; i++ {
 		if len(clients[i].cltOps) == 0 {
-			notInFrontier[i] = true
 			continue
 		}
 		i_op := clients[i].cltOps[0]
@@ -72,21 +70,20 @@ func newChains(history [][]Operation, consistency Consistency) chains {
 			switch order {
 			case HardBefore:
 				j_op.start[i] = 1
-				notInFrontier[j] = true
+				clients[j].nDeps++
 			case HardAfter:
 				i_op.start[j] = 1
-				notInFrontier[i] = true
+				clients[i].nDeps++
 			}
 		}
 	}
 
 	// create frontier
-	frontier := []int{}
+	frontier := make(map[int]struct{})
 	for i := 0; i < numClients; i++ {
-		if notInFrontier[i] {
-			continue
+		if clients[i].nDeps == 0 && len(clients[i].cltOps) > clients[i].head {
+			frontier[int(i)] = struct{}{}
 		}
-		frontier = append(frontier, int(i))
 	}
 
 	return chains{clients: clients, frontier: frontier, numOps: n}
@@ -145,7 +142,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 	for len(ch.frontier) != 0 {
 		updated := false
 		// Keep on trying to lift until we have exhausted the frontier
-		for _, i := range ch.frontier {
+		for i := range ch.frontier {
 			i_op := ch.clients[i].cltOps[ch.clients[i].head]
 			canLift := true
 
@@ -170,7 +167,8 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 						oldState = top.state
 						if int(top.cltOp.op.ClientId) == j {
 							top.cltOp.start[i] = ch.clients[i].head + 1
-							ch.update(top.cltOp.op.ClientId)
+							ch.clients[j].nDeps++
+							delete(ch.frontier, j)
 							break
 						}
 					}
@@ -185,7 +183,33 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 			}
 			newState, success := ch.clients[i].lift(model, oldState, stack, cache, serialized)
 			if success {
-				ch.update(i)
+				delete(ch.frontier, i)
+				if ch.clients[i].head < len(ch.clients[i].cltOps) {
+					nDeps := 0
+					for k := 0; k < numClients; k++ {
+						if i != k && ch.clients[k].head < ch.clients[i].cltOps[ch.clients[i].head].start[k] {
+							nDeps++
+						}
+					}
+					ch.clients[i].nDeps = nDeps
+					if nDeps == 0 {
+						ch.frontier[i] = struct{}{}
+					} else {
+						delete(ch.frontier, i)
+					}
+				}
+				for j := 0; j < numClients; j++ {
+					if i != j && ch.clients[j].head < len(ch.clients[j].cltOps) {
+						if ch.clients[i].head == ch.clients[j].cltOps[ch.clients[j].head].start[i] {
+							ch.clients[j].nDeps--
+							if ch.clients[j].nDeps == 0 {
+								ch.frontier[j] = struct{}{}
+							} else {
+								delete(ch.frontier, j)
+							}
+						}
+					}
+				}
 				return newState, success
 			}
 		}
@@ -199,34 +223,34 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 // Unlift the operation at the top of the stack and return it.
 func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset) stackEntry {
 	top := (*stack)[len(*stack)-1]
-	client := &ch.clients[top.cltOp.op.ClientId]
+	clientId := int(top.cltOp.op.ClientId)
+	client := &ch.clients[clientId]
 	client.unlift(top, serialized)
-	ch.update(int(top.cltOp.op.ClientId))
-	*stack = (*stack)[:len(*stack)-1]
-	return top
-}
+	nDeps := 0
 
-// Update the frontier after client i's head has moved.
-func (ch *chains) update(i int) {
-	// Rebuild the entire frontier for now
-	frontier := []int{}
 	for j := 0; j < len(ch.clients); j++ {
-		jId := int(j)
-		if int(ch.clients[j].head) >= len(ch.clients[j].cltOps) {
-			continue
-		}
-		blocked := false
-		for k := 0; k < len(ch.clients); k++ {
-			if jId != int(k) && ch.clients[k].head < ch.clients[j].cltOps[ch.clients[j].head].start[k] {
-				blocked = true
-				break
-			}
-		}
-		if !blocked {
-			frontier = append(frontier, jId)
+		if clientId != j && ch.clients[j].head < client.cltOps[client.head].start[j] {
+			nDeps++
 		}
 	}
-	ch.frontier = frontier
+	client.nDeps = nDeps
+	if nDeps == 0 {
+		ch.frontier[clientId] = struct{}{}
+	} else {
+		delete(ch.frontier, clientId)
+	}
+
+	for j := 0; j < len(ch.clients); j++ {
+		if clientId != j && ch.clients[j].head < len(ch.clients[j].cltOps) {
+			if ch.clients[clientId].head+1 == ch.clients[j].cltOps[ch.clients[j].head].start[clientId] {
+				ch.clients[j].nDeps++
+				delete(ch.frontier, j)
+			}
+		}
+	}
+
+	*stack = (*stack)[:len(*stack)-1]
+	return top
 }
 
 func checkSingle(model Model, consistency Consistency, history OperationHistory, computePartial bool, kill *int32) (bool, []*[]int) {
