@@ -3,44 +3,79 @@ package porcupine
 import "sync/atomic"
 
 type clientOperation struct {
-	op    Operation
-	id    int   // global operation id
-	start []int // start[c] is the index of the first operation from client c that has no outgoing dependency to this op
+	op      Operation
+	id      int   // global operation id
+	start   []int // start[c] is the index of the first operation from client c that has no outgoing dependency to this op
+	visited bool  // whether the start of this op has been computed
 }
 
 func newclientOperation(op Operation, numClients int, id int) clientOperation {
-	return clientOperation{op: op, start: make([]int, numClients), id: id}
+	return clientOperation{op: op, start: make([]int, numClients), visited: false, id: id}
 }
 
 type client struct {
 	id     int
 	cltOps []clientOperation // operations by this client
 	head   int               // head is not pushed to the stack yet
-	nDeps  int               // number of incoming dependencies of the head
 }
 
-func addToFrontier(frontier []int, val int) []int {
-	for _, v := range frontier {
-		if v == val {
-			return frontier
-		}
+func (ch *chains) computeStart(c int, consistency Consistency) {
+	if ch.clients[c].head >= len(ch.clients[c].cltOps) || ch.clients[c].cltOps[ch.clients[c].head].visited {
+		return
 	}
-	return append(frontier, val)
-}
+	op := &ch.clients[c].cltOps[ch.clients[c].head]
 
-func removeFromFrontier(frontier []int, val int) []int {
-	for i, v := range frontier {
-		if v == val {
-			return append(frontier[:i], frontier[i+1:]...)
+	// Binary search for the first client that does not have an outgoing dependency to this op
+	for d := 0; d < len(ch.clients); d++ {
+		if c == d {
+			continue
 		}
+		start := 0
+		if ch.clients[c].head > 0 {
+			start = ch.clients[c].cltOps[ch.clients[c].head-1].start[d]
+		}
+		i := start
+		step := 1
+		for i < len(ch.clients[d].cltOps) {
+			order, err := consistency.Check(&ch.clients[d].cltOps[i].op, &op.op)
+			if err != nil {
+				panic(err)
+			}
+			if order == HardBefore {
+				i += step
+				step *= 2
+			} else {
+				break
+			}
+		}
+		high := i
+		if high > len(ch.clients[d].cltOps) {
+			high = len(ch.clients[d].cltOps)
+		}
+		low := i - step/2
+		if low < start {
+			low = start
+		}
+		for low < high {
+			mid := low + (high-low)/2
+			order, err := consistency.Check(&ch.clients[d].cltOps[mid].op, &op.op)
+			if err != nil {
+				panic(err)
+			}
+			if order == HardBefore {
+				low = mid + 1
+			} else {
+				high = mid
+			}
+		}
+		op.start[d] = low
 	}
-	return frontier
+	op.visited = true
 }
 
 type chains struct {
-	clients  []client
-	frontier []int // The head of these clients are in the frontier.
-	numOps   int
+	clients []client
+	numOps  int
 }
 
 func (chains *chains) isComplete() bool {
@@ -71,41 +106,12 @@ func newChains(history [][]Operation, consistency Consistency) chains {
 		}
 	}
 
-	// Check consistency order and build the initial frontier
+	ch := chains{clients: clients, numOps: n}
 	for i := 0; i < numClients; i++ {
-		if len(clients[i].cltOps) == 0 {
-			continue
-		}
-		i_op := clients[i].cltOps[0]
-		for j := i + 1; j < numClients; j++ {
-			if len(clients[j].cltOps) == 0 {
-				continue
-			}
-			j_op := clients[j].cltOps[0]
-			order, err := consistency.Check(&i_op.op, &j_op.op)
-			if err != nil {
-				panic(err)
-			}
-			switch order {
-			case HardBefore:
-				j_op.start[i] = 1
-				clients[j].nDeps++
-			case HardAfter:
-				i_op.start[j] = 1
-				clients[i].nDeps++
-			}
-		}
+		ch.computeStart(i, consistency)
 	}
 
-	// create frontier
-	frontier := make([]int, 0)
-	for i := 0; i < numClients; i++ {
-		if clients[i].nDeps == 0 && len(clients[i].cltOps) > clients[i].head {
-			frontier = addToFrontier(frontier, int(i))
-		}
-	}
-
-	return chains{clients: clients, frontier: frontier, numOps: n}
+	return ch
 }
 
 type stackEntry struct { // entry in the stack
@@ -156,120 +162,42 @@ func (c *client) unlift(top stackEntry, serialized *bitset) {
 
 // Try to lift an operation from the frontier. If successful, push it on the stack and return the new state.
 func (ch *chains) lift(model Model, consistency Consistency, oldState interface{}, stack *[]stackEntry,
-	cache map[uint64][]cacheEntry, serialized *bitset) (interface{}, bool) {
+	cache map[uint64][]cacheEntry, serialized *bitset, liftFrom int) (interface{}, bool, int) {
 	numClients := len(ch.clients)
-	for len(ch.frontier) != 0 {
-		updated := false
-		// Keep on trying to lift until we have exhausted the frontier
-		for _, i := range ch.frontier {
-			i_op := ch.clients[i].cltOps[ch.clients[i].head]
-			canLift := true
+	// Try to lift an operation from the frontier starting from "liftFrom"
+	for i := liftFrom; i < len(ch.clients); i++ {
+		if ch.clients[i].head >= len(ch.clients[i].cltOps) {
+			continue
+		}
+		op := ch.clients[i].cltOps[ch.clients[i].head]
+		canLift := true
 
-			// Is this allowed by the consistency order? Check with all other clients
-			for j := 0; j < numClients; j++ {
-				if i == j || ch.clients[j].head == 0 {
-					continue
-				}
-				// The last operation from client j that has been lifted
-				j_op := ch.clients[j].cltOps[ch.clients[j].head-1]
-
-				order, err := consistency.Check(&i_op.op, &j_op.op)
-				if err != nil {
-					panic(err)
-				}
-				if order == HardBefore {
-					updated = true
-					canLift = false
-					// i happened before j. Pop the stack till j comes out
-					for len(*stack) > 0 {
-						top := ch.unlift(stack, serialized)
-						oldState = top.state
-						if int(top.cltOp.op.ClientId) == j {
-							top.cltOp.start[i] = ch.clients[i].head + 1
-							ch.clients[j].nDeps++
-							ch.frontier = removeFromFrontier(ch.frontier, j)
-							break
-						}
-					}
-					break
-				}
-			}
-			if !canLift {
-				if updated {
-					break
-				}
-				continue
-			}
-			newState, success := ch.clients[i].lift(model, oldState, stack, cache, serialized)
-			if success {
-				ch.frontier = removeFromFrontier(ch.frontier, i)
-				if ch.clients[i].head < len(ch.clients[i].cltOps) {
-					nDeps := 0
-					for k := 0; k < numClients; k++ {
-						if i != k && ch.clients[k].head < ch.clients[i].cltOps[ch.clients[i].head].start[k] {
-							nDeps++
-						}
-					}
-					ch.clients[i].nDeps = nDeps
-					if nDeps == 0 {
-						ch.frontier = addToFrontier(ch.frontier, i)
-					} else {
-						ch.frontier = removeFromFrontier(ch.frontier, i)
-					}
-				}
-				for j := 0; j < numClients; j++ {
-					if i != j && ch.clients[j].head < len(ch.clients[j].cltOps) {
-						if ch.clients[i].head == ch.clients[j].cltOps[ch.clients[j].head].start[i] {
-							ch.clients[j].nDeps--
-							if ch.clients[j].nDeps == 0 {
-								ch.frontier = addToFrontier(ch.frontier, j)
-							} else {
-								ch.frontier = removeFromFrontier(ch.frontier, j)
-							}
-						}
-					}
-				}
-				return newState, success
+		// check if all dependencies are serialized
+		for j := 0; j < numClients; j++ {
+			if op.start[j] > ch.clients[j].head {
+				canLift = false
+				break
 			}
 		}
-		if !updated {
-			break
+		if !canLift {
+			continue
+		}
+		newState, success := ch.clients[i].lift(model, oldState, stack, cache, serialized)
+		if success {
+			return newState, success, i
 		}
 	}
-	return nil, false
+	return nil, false, -1
 }
 
-// Unlift the operation at the top of the stack and return it.
-func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset) stackEntry {
+// Unlift an operation from the stack and return the state and the client id of the unlifted operation
+func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset, consistency Consistency) (interface{}, int) {
 	top := (*stack)[len(*stack)-1]
 	clientId := int(top.cltOp.op.ClientId)
 	client := &ch.clients[clientId]
 	client.unlift(top, serialized)
-	nDeps := 0
-
-	for j := 0; j < len(ch.clients); j++ {
-		if clientId != j && ch.clients[j].head < client.cltOps[client.head].start[j] {
-			nDeps++
-		}
-	}
-	client.nDeps = nDeps
-	if nDeps == 0 {
-		ch.frontier = addToFrontier(ch.frontier, clientId)
-	} else {
-		ch.frontier = removeFromFrontier(ch.frontier, clientId)
-	}
-
-	for j := 0; j < len(ch.clients); j++ {
-		if clientId != j && ch.clients[j].head < len(ch.clients[j].cltOps) {
-			if ch.clients[clientId].head+1 == ch.clients[j].cltOps[ch.clients[j].head].start[clientId] {
-				ch.clients[j].nDeps++
-				ch.frontier = removeFromFrontier(ch.frontier, j)
-			}
-		}
-	}
-
 	*stack = (*stack)[:len(*stack)-1]
-	return top
+	return top.state, clientId
 }
 
 func checkSingle(model Model, consistency Consistency, history OperationHistory, computePartial bool, kill *int32) (bool, []*[]int) {
@@ -284,15 +212,20 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 
 	longest := make([]*[]int, ch.numOps)
 
+	// The index of the first client to try to lift from the frontier
+	liftFrom := 0
+
 	// while all operations are not serialized, explore permutations
 	for !ch.isComplete() {
 		if atomic.LoadInt32(kill) != 0 {
 			return false, longest
 		}
 		// try serializing an operation from frontier
-		newState, ok := ch.lift(model, consistency, state, &stack, cache, &serialized)
+		newState, ok, liftedIdx := ch.lift(model, consistency, state, &stack, cache, &serialized, liftFrom)
 		if ok {
 			state = newState
+			liftFrom = 0
+			ch.computeStart(liftedIdx, consistency)
 		} else {
 			if len(stack) == 0 {
 				// no possible serialization
@@ -314,8 +247,9 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 					}
 				}
 			}
-			top := ch.unlift(&stack, &serialized)
-			state = top.state
+			top, unlifted_id := ch.unlift(&stack, &serialized, consistency)
+			state = top
+			liftFrom = unlifted_id + 1
 		}
 	}
 
