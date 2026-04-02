@@ -7,7 +7,7 @@ type EventHistory []Event
 
 // CheckOperations checks whether a history is linearizable.
 func CheckOperations(model Model, history OperationHistory) bool {
-	res, _ := checkOperations(model, Consistency{Oracles: LinearizabilityOracles}, history, false, 0)
+	res, _ := checkOperations(model, Linearizability, history, false, 0)
 	return res == Ok
 }
 
@@ -16,7 +16,7 @@ func CheckOperations(model Model, history OperationHistory) bool {
 //
 // A timeout of 0 is interpreted as an unlimited timeout.
 func CheckOperationsTimeout(model Model, history OperationHistory, timeout time.Duration) CheckResult {
-	res, _ := checkOperations(model, Consistency{Oracles: LinearizabilityOracles}, history, false, timeout)
+	res, _ := checkOperations(model, Linearizability, history, false, timeout)
 	return res
 }
 
@@ -25,12 +25,12 @@ func CheckOperationsTimeout(model Model, history OperationHistory, timeout time.
 //
 // The returned LinearizationInfo can be used with [Visualize].
 func CheckOperationsVerbose(model Model, history OperationHistory, timeout time.Duration) (CheckResult, LinearizationInfo) {
-	return checkOperations(model, Consistency{Oracles: LinearizabilityOracles}, history, true, timeout)
+	return checkOperations(model, Linearizability, history, true, timeout)
 }
 
 // CheckEvents checks whether a history is linearizable.
 func CheckEvents(model Model, history EventHistory) bool {
-	res, _ := checkEvents(model, Consistency{Oracles: LinearizabilityOracles}, history, false, 0)
+	res, _ := checkEvents(model, Linearizability, history, false, 0)
 	return res == Ok
 }
 
@@ -38,7 +38,7 @@ func CheckEvents(model Model, history EventHistory) bool {
 //
 // A timeout of 0 is interpreted as an unlimited timeout.
 func CheckEventsTimeout(model Model, history EventHistory, timeout time.Duration) CheckResult {
-	res, _ := checkEvents(model, Consistency{Oracles: LinearizabilityOracles}, history, false, timeout)
+	res, _ := checkEvents(model, Linearizability, history, false, timeout)
 	return res
 }
 
@@ -47,7 +47,7 @@ func CheckEventsTimeout(model Model, history EventHistory, timeout time.Duration
 //
 // The returned LinearizationInfo can be used with [Visualize].
 func CheckEventsVerbose(model Model, history EventHistory, timeout time.Duration) (CheckResult, LinearizationInfo) {
-	return checkEvents(model, Consistency{Oracles: LinearizabilityOracles}, history, true, timeout)
+	return checkEvents(model, Linearizability, history, true, timeout)
 }
 
 // Check general consistency models
