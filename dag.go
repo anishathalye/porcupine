@@ -1,6 +1,8 @@
 package porcupine
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+)
 
 type clientOperation struct {
 	op      Operation
@@ -74,8 +76,54 @@ func (ch *chains) computeStart(c int, consistency Consistency) {
 }
 
 type chains struct {
-	clients []client
-	numOps  int
+	clients  []client
+	numOps   int
+	frontier []int
+}
+
+func (ch *chains) canLift(c int) bool {
+	if ch.clients[c].head >= len(ch.clients[c].cltOps) {
+		return false
+	}
+	op := ch.clients[c].cltOps[ch.clients[c].head]
+	for j := 0; j < len(ch.clients); j++ {
+		if op.start[j] > ch.clients[j].head {
+			return false
+		}
+	}
+	return true
+}
+
+func (ch *chains) addToFrontier(c int, consistency Consistency) {
+	for _, v := range ch.frontier {
+		if v == c {
+			return
+		}
+	}
+	for i, v := range ch.frontier {
+		opC := &ch.clients[c].cltOps[ch.clients[c].head].op
+		opV := &ch.clients[v].cltOps[ch.clients[v].head].op
+		order, err := consistency.Check(opC, opV)
+		if err != nil {
+			panic(err)
+		}
+		if order == SoftAfter || (order == Unconstrained && c > v) {
+			ch.frontier = append(ch.frontier, 0)
+			copy(ch.frontier[i+1:], ch.frontier[i:])
+			ch.frontier[i] = c
+			return
+		}
+	}
+	ch.frontier = append(ch.frontier, c)
+}
+
+func (ch *chains) removeFromFrontier(c int) {
+	for i, v := range ch.frontier {
+		if v == c {
+			ch.frontier = append(ch.frontier[:i], ch.frontier[i+1:]...)
+			return
+		}
+	}
 }
 
 func (chains *chains) isComplete() bool {
@@ -106,18 +154,24 @@ func newChains(history [][]Operation, consistency Consistency) chains {
 		}
 	}
 
-	ch := chains{clients: clients, numOps: n}
+	ch := chains{clients: clients, numOps: n, frontier: make([]int, 0, numClients)}
 	for i := 0; i < numClients; i++ {
 		ch.computeStart(i, consistency)
+	}
+	for i := 0; i < numClients; i++ {
+		if ch.canLift(i) {
+			ch.addToFrontier(i, consistency)
+		}
 	}
 
 	return ch
 }
 
 type stackEntry struct { // entry in the stack
-	cltOp clientOperation // operation has ClientID in it. This operation was pushed on the stack
-	state interface{}     // state before this node was pushed on the stack
-	opIdx int             // index of the operation in the client's history
+	cltOp       clientOperation // operation has ClientID in it. This operation was pushed on the stack
+	state       interface{}     // state before this node was pushed on the stack
+	opIdx       int             // index of the operation in the client's history
+	frontierIdx int             // index of the operation in the frontier, sorted in descending order of soft constraints
 }
 
 // Try to lift the operation at the head of this client. If successful, push
@@ -162,32 +216,28 @@ func (c *client) unlift(top stackEntry, serialized *bitset) {
 
 // Try to lift an operation from the frontier. If successful, push it on the stack and return the new state.
 func (ch *chains) lift(model Model, consistency Consistency, oldState interface{}, stack *[]stackEntry,
-	cache map[uint64][]cacheEntry, serialized *bitset, liftFrom int) (interface{}, bool, int) {
-	numClients := len(ch.clients)
+	cache map[uint64][]cacheEntry, serialized *bitset, liftFrom int) (interface{}, bool) {
 	// Try to lift an operation from the frontier starting from "liftFrom"
-	for i := liftFrom; i < len(ch.clients); i++ {
-		if ch.clients[i].head >= len(ch.clients[i].cltOps) {
-			continue
-		}
-		op := ch.clients[i].cltOps[ch.clients[i].head]
-		canLift := true
-
-		// check if all dependencies are serialized
-		for j := 0; j < numClients; j++ {
-			if op.start[j] > ch.clients[j].head {
-				canLift = false
-				break
-			}
-		}
-		if !canLift {
-			continue
-		}
+	for idx := liftFrom; idx >= 0; idx-- {
+		i := ch.frontier[idx]
 		newState, success := ch.clients[i].lift(model, oldState, stack, cache, serialized)
 		if success {
-			return newState, success, i
+			(*stack)[len(*stack)-1].frontierIdx = idx
+			ch.computeStart(i, consistency)
+
+			ch.removeFromFrontier(i)
+			if ch.canLift(i) {
+				ch.addToFrontier(i, consistency)
+			}
+			for j := 0; j < len(ch.clients); j++ {
+				if j != i && ch.canLift(j) {
+					ch.addToFrontier(j, consistency)
+				}
+			}
+			return newState, success
 		}
 	}
-	return nil, false, -1
+	return nil, false
 }
 
 // Unlift an operation from the stack and return the state and the client id of the unlifted operation
@@ -195,9 +245,19 @@ func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset, consistency Co
 	top := (*stack)[len(*stack)-1]
 	clientId := int(top.cltOp.op.ClientId)
 	client := &ch.clients[clientId]
+
+	ch.removeFromFrontier(clientId)
 	client.unlift(top, serialized)
 	*stack = (*stack)[:len(*stack)-1]
-	return top.state, clientId
+
+	for j := 0; j < len(ch.clients); j++ {
+		if j != clientId && !ch.canLift(j) {
+			ch.removeFromFrontier(j)
+		}
+	}
+	ch.addToFrontier(clientId, consistency)
+
+	return top.state, top.frontierIdx
 }
 
 func checkSingle(model Model, consistency Consistency, history OperationHistory, computePartial bool, kill *int32) (bool, []*[]int) {
@@ -213,7 +273,7 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 	longest := make([]*[]int, ch.numOps)
 
 	// The index of the first client to try to lift from the frontier
-	liftFrom := 0
+	liftFrom := len(ch.frontier) - 1
 
 	// while all operations are not serialized, explore permutations
 	for !ch.isComplete() {
@@ -221,11 +281,10 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 			return false, longest
 		}
 		// try serializing an operation from frontier
-		newState, ok, liftedIdx := ch.lift(model, consistency, state, &stack, cache, &serialized, liftFrom)
+		newState, ok := ch.lift(model, consistency, state, &stack, cache, &serialized, liftFrom)
 		if ok {
 			state = newState
-			liftFrom = 0
-			ch.computeStart(liftedIdx, consistency)
+			liftFrom = len(ch.frontier) - 1
 		} else {
 			if len(stack) == 0 {
 				// no possible serialization
@@ -249,7 +308,7 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 			}
 			top, unlifted_id := ch.unlift(&stack, &serialized, consistency)
 			state = top
-			liftFrom = unlifted_id + 1
+			liftFrom = unlifted_id - 1
 		}
 	}
 
