@@ -19,6 +19,7 @@ type client struct {
 	id     int
 	cltOps []clientOperation // operations by this client
 	head   int               // head is not pushed to the stack yet
+	nDeps  int               // number of unsatisfied dependencies for operation at head
 }
 
 func (ch *chains) computeStart(c int, consistency Consistency) {
@@ -81,18 +82,6 @@ type chains struct {
 	frontier []int
 }
 
-func (ch *chains) canLift(c int) bool {
-	if ch.clients[c].head >= len(ch.clients[c].cltOps) {
-		return false
-	}
-	op := ch.clients[c].cltOps[ch.clients[c].head]
-	for j := 0; j < len(ch.clients); j++ {
-		if op.start[j] > ch.clients[j].head {
-			return false
-		}
-	}
-	return true
-}
 
 func (ch *chains) addToFrontier(c int, consistency Consistency) {
 	for _, v := range ch.frontier {
@@ -157,9 +146,18 @@ func newChains(history [][]Operation, consistency Consistency) chains {
 	ch := chains{clients: clients, numOps: n, frontier: make([]int, 0, numClients)}
 	for i := 0; i < numClients; i++ {
 		ch.computeStart(i, consistency)
+		ch.clients[i].nDeps = 0
+		if len(ch.clients[i].cltOps) > 0 {
+			op := ch.clients[i].cltOps[0]
+			for j := 0; j < numClients; j++ {
+				if j != i && op.start[j] > 0 {
+					ch.clients[i].nDeps++
+				}
+			}
+		}
 	}
 	for i := 0; i < numClients; i++ {
-		if ch.canLift(i) {
+		if len(ch.clients[i].cltOps) > 0 && ch.clients[i].nDeps == 0 {
 			ch.addToFrontier(i, consistency)
 		}
 	}
@@ -226,12 +224,28 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 			ch.computeStart(i, consistency)
 
 			ch.removeFromFrontier(i)
-			if ch.canLift(i) {
-				ch.addToFrontier(i, consistency)
+			
+			if ch.clients[i].head < len(ch.clients[i].cltOps) {
+				opI := ch.clients[i].cltOps[ch.clients[i].head]
+				ch.clients[i].nDeps = 0
+				for k := 0; k < len(ch.clients); k++ {
+					if k != i && opI.start[k] > ch.clients[k].head {
+						ch.clients[i].nDeps++
+					}
+				}
+				if ch.clients[i].nDeps == 0 {
+					ch.addToFrontier(i, consistency)
+				}
 			}
+
 			for j := 0; j < len(ch.clients); j++ {
-				if j != i && ch.canLift(j) {
-					ch.addToFrontier(j, consistency)
+				if j != i && ch.clients[j].head < len(ch.clients[j].cltOps) {
+					if ch.clients[j].cltOps[ch.clients[j].head].start[i] == ch.clients[i].head {
+						ch.clients[j].nDeps--
+						if ch.clients[j].nDeps == 0 {
+							ch.addToFrontier(j, consistency)
+						}
+					}
 				}
 			}
 			return newState, success
@@ -250,9 +264,16 @@ func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset, consistency Co
 	client.unlift(top, serialized)
 	*stack = (*stack)[:len(*stack)-1]
 
+	ch.clients[clientId].nDeps = 0
+
 	for j := 0; j < len(ch.clients); j++ {
-		if j != clientId && !ch.canLift(j) {
-			ch.removeFromFrontier(j)
+		if j != clientId && ch.clients[j].head < len(ch.clients[j].cltOps) {
+			if ch.clients[j].cltOps[ch.clients[j].head].start[clientId] == ch.clients[clientId].head+1 {
+				if ch.clients[j].nDeps == 0 {
+					ch.removeFromFrontier(j)
+				}
+				ch.clients[j].nDeps++
+			}
 		}
 	}
 	ch.addToFrontier(clientId, consistency)
