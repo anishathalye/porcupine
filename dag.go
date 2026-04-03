@@ -14,7 +14,7 @@ type clientOperation struct {
 }
 
 func newclientOperation(op Operation, numClients int, id int) clientOperation {
-	return clientOperation{op: op, start: make([]int, numClients), visited: false, id: id}
+	return clientOperation{op: op, start: nil, visited: false, id: id}
 }
 
 type client struct {
@@ -140,6 +140,13 @@ func newChains(history OperationHistory, consistency Consistency) chains {
 		n += len(c)
 	}
 
+	starts := make([]int, n*numClients)
+	for i := 0; i < numClients; i++ {
+		for j := 0; j < len(clients[i].cltOps); j++ {
+			clients[i].cltOps[j].start = starts[clients[i].cltOps[j].id*numClients : (clients[i].cltOps[j].id+1)*numClients]
+		}
+	}
+
 	ch := chains{clients: clients, numOps: n, frontier: make([]int, 0, numClients)}
 	for i := 0; i < numClients; i++ {
 		ch.computeStart(i, consistency)
@@ -163,10 +170,11 @@ func newChains(history OperationHistory, consistency Consistency) chains {
 }
 
 type stackEntry struct { // entry in the stack
-	cltOp       clientOperation // operation has ClientID in it. This operation was pushed on the stack
-	state       interface{}     // state before this node was pushed on the stack
-	opIdx       int             // index of the operation in the client's history
-	frontierIdx int             // index of the operation in the frontier, sorted in descending order of soft constraints
+	opId        int         // global operation id
+	clientId    int         // client of the operation
+	state       interface{} // state before this node was pushed on the stack
+	opIdx       int         // index of the operation in the client's history
+	frontierIdx int         // index of the operation in the frontier, sorted in descending order of soft constraints
 }
 
 // Try to lift the operation at the head of this client. If successful, push
@@ -195,9 +203,10 @@ func (c *client) lift(model Model, oldState interface{}, stack *[]stackEntry,
 
 	cache[hash] = append(cache[hash], cacheEntry{serialized.clone(), newState})
 	e := stackEntry{
-		cltOp: cltOp,
-		state: oldState,
-		opIdx: c.head,
+		opId:     cltOp.id,
+		clientId: c.id,
+		state:    oldState,
+		opIdx:    c.head,
 	}
 	*stack = append(*stack, e)
 	c.head++
@@ -206,11 +215,11 @@ func (c *client) lift(model Model, oldState interface{}, stack *[]stackEntry,
 
 // Unlift the operation at the top of the stack.
 func (c *client) unlift(top stackEntry, serialized *bitset) {
-	if c.id != int(top.cltOp.op.ClientId) {
+	if c.id != top.clientId {
 		panic("Tried to unlift someone else's operation")
 	}
 	c.head--
-	serialized.clear(uint(top.cltOp.id))
+	serialized.clear(uint(top.opId))
 }
 
 // Try to lift an operation from the frontier. If successful, push it on the stack and return the new state.
@@ -258,7 +267,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 // Unlift an operation from the stack and return the state and the client id of the unlifted operation
 func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset, consistency Consistency) (interface{}, int) {
 	top := (*stack)[len(*stack)-1]
-	clientId := int(top.cltOp.op.ClientId)
+	clientId := top.clientId
 	client := &ch.clients[clientId]
 
 	ch.removeFromFrontier(clientId)
@@ -316,15 +325,15 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 				callsLen := len(stack)
 				var seq []int = nil
 				for _, v := range stack {
-					if longest[v.cltOp.id] == nil || callsLen > len(*longest[v.cltOp.id]) {
+					if longest[v.opId] == nil || callsLen > len(*longest[v.opId]) {
 						// create seq lazily
 						if seq == nil {
 							seq = make([]int, len(stack))
-							for i, v := range stack {
-								seq[i] = v.cltOp.id
+							for j, w := range stack {
+								seq[j] = w.opId
 							}
 						}
-						longest[v.cltOp.id] = &seq
+						longest[v.opId] = &seq
 					}
 				}
 			}
@@ -336,7 +345,7 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 
 	seq := make([]int, len(stack))
 	for i, v := range stack {
-		seq[i] = v.cltOp.id
+		seq[i] = v.opId
 	}
 	for i := 0; i < ch.numOps; i++ {
 		longest[i] = &seq
