@@ -181,15 +181,19 @@ func (c *client) lift(model Model, oldState interface{}, stack *[]stackEntry,
 	}
 
 	// check cache
-	newSerialized := serialized.clone().set(uint(cltOp.id)) // add to bit set
-	newCacheEntry := cacheEntry{newSerialized, newState}
-	if cacheContains(model, cache, newCacheEntry) {
-		return oldState, false
+	serialized.set(uint(cltOp.id))
+	hash := serialized.hash()
+
+	if entries, ok := cache[hash]; ok {
+		for _, elem := range entries {
+			if serialized.equals(elem.linearized) && model.Equal(newState, elem.state) {
+				serialized.clear(uint(cltOp.id))
+				return oldState, false
+			}
+		}
 	}
 
-	hash := newSerialized.hash()
-	cache[hash] = append(cache[hash], newCacheEntry)
-	serialized.set(uint(cltOp.id))
+	cache[hash] = append(cache[hash], cacheEntry{serialized.clone(), newState})
 	e := stackEntry{
 		cltOp: cltOp,
 		state: oldState,
