@@ -49,10 +49,10 @@ func TestRegisterModel(t *testing.T) {
 	// examples taken from http://nil.csail.mit.edu/6.824/2017/quizzes/q2-17-ans.pdf
 	// section VII
 
-	ops := OperationHistory{
-		{{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100, OpKind: Write}},
-		{{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75, OpKind: Read}},
-		{{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 60, OpKind: Read}},
+	ops := []Operation{
+		{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100},
+		{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75},
+		{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 60},
 	}
 	res := CheckOperations(registerModel, ops)
 	if res != true {
@@ -73,10 +73,10 @@ func TestRegisterModel(t *testing.T) {
 		t.Fatal("expected operations to be linearizable")
 	}
 
-	ops = OperationHistory{
-		{{ClientId: 0, Input: registerInput{false, 200}, Call: 0, Output: 0, Return: 100, OpKind: Write}},
-		{{ClientId: 1, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 30, OpKind: Read}},
-		{{ClientId: 2, Input: registerInput{true, 0}, Call: 40, Output: 0, Return: 90, OpKind: Read}},
+	ops = []Operation{
+		{ClientId: 0, Input: registerInput{false, 200}, Call: 0, Output: 0, Return: 100},
+		{ClientId: 1, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 30},
+		{ClientId: 2, Input: registerInput{true, 0}, Call: 40, Output: 0, Return: 90},
 	}
 	res = CheckOperations(registerModel, ops)
 	if res != false {
@@ -85,12 +85,12 @@ func TestRegisterModel(t *testing.T) {
 
 	// same example as above, but with Event
 	events = []Event{
-		{ClientId: 0, Kind: CallEvent, Value: registerInput{false, 200}, Id: 0, OpKind: Write},
-		{ClientId: 1, Kind: CallEvent, Value: registerInput{true, 0}, Id: 1, OpKind: Read},
-		{ClientId: 1, Kind: ReturnEvent, Value: 200, Id: 1, OpKind: Read},
-		{ClientId: 2, Kind: CallEvent, Value: registerInput{true, 0}, Id: 2, OpKind: Read},
-		{ClientId: 2, Kind: ReturnEvent, Value: 0, Id: 2, OpKind: Write},
-		{ClientId: 0, Kind: ReturnEvent, Value: 0, Id: 0, OpKind: Read},
+		{ClientId: 0, Kind: CallEvent, Value: registerInput{false, 200}, Id: 0},
+		{ClientId: 1, Kind: CallEvent, Value: registerInput{true, 0}, Id: 1},
+		{ClientId: 1, Kind: ReturnEvent, Value: 200, Id: 1},
+		{ClientId: 2, Kind: CallEvent, Value: registerInput{true, 0}, Id: 2},
+		{ClientId: 2, Kind: ReturnEvent, Value: 0, Id: 2},
+		{ClientId: 0, Kind: ReturnEvent, Value: 0, Id: 0},
 	}
 	res = CheckEvents(registerModel, events)
 	if res != false {
@@ -99,24 +99,24 @@ func TestRegisterModel(t *testing.T) {
 }
 
 func TestZeroDuration(t *testing.T) {
-	ops := OperationHistory{
-		{{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100, OpKind: Write}},
-		{{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75, OpKind: Read}},
-		{{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 30, OpKind: Read}},
-		{{ClientId: 3, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 30, OpKind: Read}},
+	ops := []Operation{
+		{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100},
+		{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75},
+		{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 30},
+		{ClientId: 3, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 30},
 	}
-	res, _ := CheckOperationsVerbose(registerModel, ops, 0)
+	res, info := CheckOperationsVerbose(registerModel, ops, 0)
 	if res != Ok {
 		t.Fatal("expected operations to be linearizable")
 	}
 
-	// visualizeTempFile(t, registerModel, info)
+	visualizeTempFile(t, registerModel, info)
 
-	ops = OperationHistory{
-		{{ClientId: 0, Input: registerInput{false, 200}, Call: 0, Output: 0, Return: 100, OpKind: Write}},
-		{{ClientId: 1, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 10, OpKind: Read}},
-		{{ClientId: 2, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 10, OpKind: Read}},
-		{{ClientId: 3, Input: registerInput{true, 0}, Call: 40, Output: 0, Return: 90, OpKind: Read}},
+	ops = []Operation{
+		{ClientId: 0, Input: registerInput{false, 200}, Call: 0, Output: 0, Return: 100},
+		{ClientId: 1, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 10},
+		{ClientId: 2, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 10},
+		{ClientId: 3, Input: registerInput{true, 0}, Call: 40, Output: 0, Return: 90},
 	}
 	res, _ = CheckOperationsVerbose(registerModel, ops, 0)
 	if res != Illegal {
@@ -228,14 +228,14 @@ func parseJepsenLog(filename string) []Event {
 		case invokeRead.MatchString(line):
 			args := invokeRead.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
-			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 0}, Id: id, OpKind: Read})
+			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 0}, Id: id})
 			procIdMap[proc] = id
 			id++
 		case invokeWrite.MatchString(line):
 			args := invokeWrite.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			value, _ := strconv.Atoi(args[2])
-			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 1, arg1: value}, Id: id, OpKind: Write})
+			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 1, arg1: value}, Id: id})
 			procIdMap[proc] = id
 			id++
 		case invokeCas.MatchString(line):
@@ -243,7 +243,7 @@ func parseJepsenLog(filename string) []Event {
 			proc, _ := strconv.Atoi(args[1])
 			from, _ := strconv.Atoi(args[2])
 			to, _ := strconv.Atoi(args[3])
-			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 2, arg1: from, arg2: to}, Id: id, OpKind: RMW})
+			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 2, arg1: from, arg2: to}, Id: id})
 			procIdMap[proc] = id
 			id++
 		case returnRead.MatchString(line):
@@ -257,19 +257,19 @@ func parseJepsenLog(filename string) []Event {
 			}
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{exists: exists, value: value}, Id: matchId, OpKind: Read})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{exists: exists, value: value}, Id: matchId})
 		case returnWrite.MatchString(line):
 			args := returnWrite.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{}, Id: matchId, OpKind: Write})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{}, Id: matchId})
 		case returnCas.MatchString(line):
 			args := returnCas.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{ok: args[2] == "ok"}, Id: matchId, OpKind: RMW})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{ok: args[2] == "ok"}, Id: matchId})
 		case timeoutRead.MatchString(line):
 			// timing out a read and then continuing operations is fine
 			// we could just delete the read from the events, but we do this the lazy way
@@ -278,12 +278,12 @@ func parseJepsenLog(filename string) []Event {
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
 			// okay to put the return here in the history
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{unknown: true}, Id: matchId, OpKind: UnknownOp})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{unknown: true}, Id: matchId})
 		}
 	}
 
 	for proc, matchId := range procIdMap {
-		events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{unknown: true}, Id: matchId, OpKind: UnknownOp})
+		events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{unknown: true}, Id: matchId})
 	}
 
 	return events
@@ -1139,29 +1139,24 @@ type kvOutput struct {
 }
 
 var kvModel = Model{
-	Partition: func(history OperationHistory) []OperationHistory {
-		m := make(map[string]OperationHistory)
-		for i, h := range history {
-			for _, v := range h {
-				key := v.Input.(kvInput).key
-				if _, ok := m[key]; !ok {
-					m[key] = make(OperationHistory, len(history))
-				}
-				m[key][i] = append(m[key][i], v)
-			}
+	Partition: func(history []Operation) [][]Operation {
+		m := make(map[string][]Operation)
+		for _, v := range history {
+			key := v.Input.(kvInput).key
+			m[key] = append(m[key], v)
 		}
 		keys := make([]string, 0, len(m))
 		for k := range m {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		ret := make([]OperationHistory, 0, len(keys))
+		ret := make([][]Operation, 0, len(keys))
 		for _, k := range keys {
 			ret = append(ret, m[k])
 		}
 		return ret
 	},
-	PartitionEvent: func(history EventHistory) []EventHistory {
+	PartitionEvent: func(history []Event) [][]Event {
 		m := make(map[string][]Event)
 		match := make(map[int]string) // id -> key
 		for _, v := range history {
@@ -1174,7 +1169,7 @@ var kvModel = Model{
 				m[key] = append(m[key], v)
 			}
 		}
-		var ret []EventHistory
+		var ret [][]Event
 		for _, v := range m {
 			ret = append(ret, v)
 		}
@@ -1292,19 +1287,19 @@ func parseKvLog(filename string) []Event {
 		case invokeGet.MatchString(line):
 			args := invokeGet.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
-			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: kvInput{op: 0, key: args[2]}, Id: id, OpKind: Read})
+			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: kvInput{op: 0, key: args[2]}, Id: id})
 			procIdMap[proc] = id
 			id++
 		case invokePut.MatchString(line):
 			args := invokePut.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
-			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: kvInput{op: 1, key: args[2], value: args[3]}, Id: id, OpKind: Write})
+			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: kvInput{op: 1, key: args[2], value: args[3]}, Id: id})
 			procIdMap[proc] = id
 			id++
 		case invokeAppend.MatchString(line):
 			args := invokeAppend.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
-			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: kvInput{op: 2, key: args[2], value: args[3]}, Id: id, OpKind: RMW})
+			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: kvInput{op: 2, key: args[2], value: args[3]}, Id: id})
 			procIdMap[proc] = id
 			id++
 		case returnGet.MatchString(line):
@@ -1312,24 +1307,24 @@ func parseKvLog(filename string) []Event {
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: kvOutput{args[2]}, Id: matchId, OpKind: Read})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: kvOutput{args[2]}, Id: matchId})
 		case returnPut.MatchString(line):
 			args := returnPut.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: kvOutput{}, Id: matchId, OpKind: Write})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: kvOutput{}, Id: matchId})
 		case returnAppend.MatchString(line):
 			args := returnAppend.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: kvOutput{}, Id: matchId, OpKind: RMW})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: kvOutput{}, Id: matchId})
 		}
 	}
 
 	for proc, matchId := range procIdMap {
-		events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: kvOutput{}, Id: matchId, OpKind: UnknownOp})
+		events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: kvOutput{}, Id: matchId})
 	}
 
 	return events
@@ -1692,17 +1687,17 @@ func TestNondeterministicRegisterModel(t *testing.T) {
 	}
 
 	model := nondeterministicRegisterModel.ToModel()
-	res, _ := CheckEventsVerbose(model, events, 0)
+	res, info := CheckEventsVerbose(model, events, 0)
 
 	if res != Illegal {
 		t.Fatal("expected operations to not be linearizable")
 	}
 
-	// visualizeTempFile(t, model, info)
+	visualizeTempFile(t, model, info)
 }
 
 func TestCheckNoPartitions(t *testing.T) {
-	ops := [][]Operation{}
+	ops := []Operation{}
 	res, _ := CheckOperationsVerbose(kvModel, ops, 0)
 	if res != Ok {
 		t.Fatalf("expected output %v, got output %v", Ok, res)
@@ -1711,10 +1706,10 @@ func TestCheckNoPartitions(t *testing.T) {
 
 func TestRegisterModelMetadata(t *testing.T) {
 	// similar to TestRegisterModel but with metadata
-	ops := OperationHistory{
-		{{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100, Metadata: "meta1"}},
-		{{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75, Metadata: "meta2"}},
-		{{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 60, Metadata: "meta3"}},
+	ops := []Operation{
+		{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100, Metadata: "meta1"},
+		{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75, Metadata: "meta2"},
+		{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 60, Metadata: "meta3"},
 	}
 	res, info := CheckOperationsVerbose(registerModel, ops, 0)
 	if res != Ok {

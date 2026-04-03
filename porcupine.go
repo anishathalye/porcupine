@@ -2,11 +2,8 @@ package porcupine
 
 import "time"
 
-type OperationHistory [][]Operation
-type EventHistory []Event
-
 // CheckOperations checks whether a history is linearizable.
-func CheckOperations(model Model, history OperationHistory) bool {
+func CheckOperations(model Model, history []Operation) bool {
 	res, _ := checkOperations(model, Linearizability, history, false, 0)
 	return res == Ok
 }
@@ -15,7 +12,7 @@ func CheckOperations(model Model, history OperationHistory) bool {
 // timeout.
 //
 // A timeout of 0 is interpreted as an unlimited timeout.
-func CheckOperationsTimeout(model Model, history OperationHistory, timeout time.Duration) CheckResult {
+func CheckOperationsTimeout(model Model, history []Operation, timeout time.Duration) CheckResult {
 	res, _ := checkOperations(model, Linearizability, history, false, timeout)
 	return res
 }
@@ -24,12 +21,12 @@ func CheckOperationsTimeout(model Model, history OperationHistory, timeout time.
 // computing data that can be used to visualize the history and linearization.
 //
 // The returned LinearizationInfo can be used with [Visualize].
-func CheckOperationsVerbose(model Model, history OperationHistory, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func CheckOperationsVerbose(model Model, history []Operation, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	return checkOperations(model, Linearizability, history, true, timeout)
 }
 
 // CheckEvents checks whether a history is linearizable.
-func CheckEvents(model Model, history EventHistory) bool {
+func CheckEvents(model Model, history []Event) bool {
 	res, _ := checkEvents(model, Linearizability, history, false, 0)
 	return res == Ok
 }
@@ -37,7 +34,7 @@ func CheckEvents(model Model, history EventHistory) bool {
 // CheckEventsTimeout checks whether a history is linearizable, with a timeout.
 //
 // A timeout of 0 is interpreted as an unlimited timeout.
-func CheckEventsTimeout(model Model, history EventHistory, timeout time.Duration) CheckResult {
+func CheckEventsTimeout(model Model, history []Event, timeout time.Duration) CheckResult {
 	res, _ := checkEvents(model, Linearizability, history, false, timeout)
 	return res
 }
@@ -46,36 +43,36 @@ func CheckEventsTimeout(model Model, history EventHistory, timeout time.Duration
 // data that can be used to visualize the history and linearization.
 //
 // The returned LinearizationInfo can be used with [Visualize].
-func CheckEventsVerbose(model Model, history EventHistory, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func CheckEventsVerbose(model Model, history []Event, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	return checkEvents(model, Linearizability, history, true, timeout)
 }
 
 // Check general consistency models
 
-func CheckOperationsWithConsistency(model Model, consistency Consistency, history OperationHistory) bool {
+func CheckOperationsWithConsistency(model Model, consistency Consistency, history []Operation) bool {
 	res, _ := checkOperations(model, consistency, history, false, 0)
 	return res == Ok
 }
 
-func CheckOperationsWithConsistencyTimeout(model Model, consistency Consistency, history OperationHistory, timeout time.Duration) CheckResult {
+func CheckOperationsWithConsistencyTimeout(model Model, consistency Consistency, history []Operation, timeout time.Duration) CheckResult {
 	res, _ := checkOperations(model, consistency, history, false, timeout)
 	return res
 }
 
-func CheckOperationsWithConsistencyVerbose(model Model, consistency Consistency, history OperationHistory, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func CheckOperationsWithConsistencyVerbose(model Model, consistency Consistency, history []Operation, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	return checkOperations(model, consistency, history, true, timeout)
 }
 
-func CheckEventsWithConsistency(model Model, consistency Consistency, history EventHistory) bool {
+func CheckEventsWithConsistency(model Model, consistency Consistency, history []Event) bool {
 	res, _ := checkEvents(model, Consistency{Oracles: LinearizabilityOracles}, history, false, 0)
 	return res == Ok
 }
 
-func CheckEventsWithConsistencyTimeout(model Model, consistency Consistency, history EventHistory, timeout time.Duration) CheckResult {
+func CheckEventsWithConsistencyTimeout(model Model, consistency Consistency, history []Event, timeout time.Duration) CheckResult {
 	res, _ := checkEvents(model, consistency, history, false, timeout)
 	return res
 }
 
-func CheckEventsWithConsistencyVerbose(model Model, consistency Consistency, history EventHistory, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func CheckEventsWithConsistencyVerbose(model Model, consistency Consistency, history []Event, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	return checkEvents(model, consistency, history, true, timeout)
 }

@@ -4,6 +4,8 @@ import (
 	"sync/atomic"
 )
 
+type OperationHistory [][]clientOperation
+
 type clientOperation struct {
 	op      Operation
 	id      int   // global operation id
@@ -82,7 +84,6 @@ type chains struct {
 	frontier []int
 }
 
-
 func (ch *chains) addToFrontier(c int, consistency Consistency) {
 	for _, v := range ch.frontier {
 		if v == c {
@@ -125,22 +126,18 @@ func (chains *chains) isComplete() bool {
 }
 
 // Build the initial chains and frontier
-func newChains(history [][]Operation, consistency Consistency) chains {
+func newChains(history OperationHistory, consistency Consistency) chains {
 	numClients := len(history)
 	clients := make([]client, numClients)
 	n := 0
-	// Add all operations to clients and assign them global ids.
+	// Add all operations to clients
 	for i, c := range history {
-		clientOps := make([]clientOperation, 0)
-		for _, op := range c {
-			clientOps = append(clientOps, newclientOperation(op, numClients, n))
-			n++
-		}
 		clients[i] = client{
 			id:     int(i),
-			cltOps: clientOps,
+			cltOps: c,
 			head:   0,
 		}
+		n += len(c)
 	}
 
 	ch := chains{clients: clients, numOps: n, frontier: make([]int, 0, numClients)}
@@ -224,7 +221,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 			ch.computeStart(i, consistency)
 
 			ch.removeFromFrontier(i)
-			
+
 			if ch.clients[i].head < len(ch.clients[i].cltOps) {
 				opI := ch.clients[i].cltOps[ch.clients[i].head]
 				ch.clients[i].nDeps = 0

@@ -114,8 +114,8 @@ type Model struct {
 	// Partition functions, such that a history is linearizable if and only
 	// if each partition is linearizable. If left nil, this package will
 	// skip partitioning.
-	Partition      func(history OperationHistory) []OperationHistory
-	PartitionEvent func(history EventHistory) []EventHistory
+	Partition      func(history []Operation) [][]Operation
+	PartitionEvent func(history []Event) [][]Event
 	// Initial state of the system.
 	Init func() interface{}
 	// Step function for the system. Returns whether or not the system
@@ -156,8 +156,8 @@ type NondeterministicModel struct {
 	// Partition functions, such that a history is linearizable if and only
 	// if each partition is linearizable. If left nil, this package will
 	// skip partitioning.
-	Partition      func(history OperationHistory) []OperationHistory
-	PartitionEvent func(history EventHistory) []EventHistory
+	Partition      func(history []Operation) [][]Operation
+	PartitionEvent func(history []Event) [][]Event
 	// Initial states of the system.
 	Init func() []interface{}
 	// Step function for the system. Returns all possible next states for
@@ -278,14 +278,14 @@ func (nm *NondeterministicModel) ToModel() Model {
 
 // noPartition is a fallback partition function that partitions the history
 // into a single partition containing all of the operations.
-func noPartition(history OperationHistory) []OperationHistory {
-	return []OperationHistory{history}
+func noPartition(history []Operation) [][]Operation {
+	return [][]Operation{history}
 }
 
 // noPartitionEvent is a fallback partition function that partitions the
 // history into a single partition containing all of the events.
-func noPartitionEvent(history EventHistory) []EventHistory {
-	return []EventHistory{history}
+func noPartitionEvent(history []Event) [][]Event {
+	return [][]Event{history}
 }
 
 // shallowEqual is a fallback equality function that compares two states using

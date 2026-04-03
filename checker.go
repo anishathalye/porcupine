@@ -19,6 +19,7 @@ type entry struct {
 	id       int
 	time     int64
 	clientId int
+	opKind   OperationKind
 	metadata interface{}
 }
 
@@ -125,25 +126,21 @@ func (a byTime) Less(i, j int) bool {
 	return a[i].kind == callEntry && a[j].kind == returnEntry
 }
 
-func makeEntries(history OperationHistory) entries {
-	h := make([]Operation, 0)
-	for _, ops := range history {
-		for _, op := range ops {
-			h = append(h, op)
-		}
-	}
-
+func makeEntries(history []Operation, numClients int) (entries, OperationHistory) {
 	var entries entries = nil
 	id := 0
-	for _, elem := range h {
+	operationHistory := make(OperationHistory, numClients)
+	for _, elem := range history {
 		entries = append(entries, entry{
-			callEntry, elem.Input, id, elem.Call, elem.ClientId, elem.Metadata})
+			callEntry, elem.Input, id, elem.Call, elem.ClientId, elem.OpKind, elem.Metadata})
 		entries = append(entries, entry{
-			returnEntry, elem.Output, id, elem.Return, elem.ClientId, elem.Metadata})
+			returnEntry, elem.Output, id, elem.Return, elem.ClientId, elem.OpKind, elem.Metadata})
+		clientOp := newclientOperation(elem, numClients, id)
+		operationHistory[elem.ClientId] = append(operationHistory[elem.ClientId], clientOp)
 		id++
 	}
 	sort.Sort(byTime(entries))
-	return entries
+	return entries, operationHistory
 }
 
 type node struct {
@@ -192,17 +189,21 @@ func renumber(events []Event) []Event {
 	return e
 }
 
-func convertEntries(events EventHistory) entries {
+func convertEntries(events []Event) (entries, int) {
 	var entries entries
+	maxClientId := 0
 	for i, elem := range events {
 		kind := callEntry
 		if elem.Kind == ReturnEvent {
 			kind = returnEntry
 		}
 		// use index as "time"
-		entries = append(entries, entry{kind, elem.Value, elem.Id, int64(i), elem.ClientId, elem.Metadata})
+		entries = append(entries, entry{kind, elem.Value, elem.Id, int64(i), elem.ClientId, elem.OpKind, elem.Metadata})
+		if elem.ClientId > maxClientId {
+			maxClientId = elem.ClientId
+		}
 	}
-	return entries
+	return entries, maxClientId + 1
 }
 
 func makeLinkedEntries(entries entries) *node {
@@ -443,33 +444,34 @@ loop:
 	return result, info
 }
 
-func checkEvents(model Model, consistency Consistency, history EventHistory, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func checkEvents(model Model, consistency Consistency, history []Event, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	model = fillDefault(model)
 	partitions := model.PartitionEvent(history)
 	l := make([]entries, len(partitions))
 	operationHistories := make([]OperationHistory, 0, len(partitions))
+	var numClients int
 	for i, subhistory := range partitions {
-		l[i] = convertEntries(renumber(subhistory))
-		operationHistory := make(OperationHistory, 0)
-		clientOperations := make(map[int][]Operation)
+		l[i], numClients = convertEntries(renumber(subhistory))
+		operationHistory := make([][]clientOperation, 0)
+		clientOperations := make(map[int][]clientOperation)
 		maxClientId := 0
-		for j, ev := range subhistory {
-			if ev.Kind == CallEvent {
+		for j, ev := range l[i] {
+			if ev.kind == false {
 				op := Operation{
-					ClientId: ev.ClientId,
-					OpKind:   ev.OpKind,
-					Input:    ev.Value,
+					ClientId: ev.clientId,
+					OpKind:   ev.opKind,
+					Input:    ev.value,
 					Call:     int64(j),
 				}
-				clientOperations[ev.ClientId] = append(clientOperations[ev.ClientId], op)
+				clientOperations[ev.clientId] = append(clientOperations[ev.clientId], newclientOperation(op, numClients, ev.id))
 			} else {
-				call := clientOperations[ev.ClientId][len(clientOperations[ev.ClientId])-1]
-				call.Output = ev.Value
-				call.Return = int64(j)
-				clientOperations[ev.ClientId][len(clientOperations[ev.ClientId])-1] = call
+				call := clientOperations[ev.clientId][len(clientOperations[ev.clientId])-1]
+				call.op.Output = ev.value
+				call.op.Return = int64(j)
+				clientOperations[ev.clientId][len(clientOperations[ev.clientId])-1] = call
 			}
-			if ev.ClientId > maxClientId {
-				maxClientId = ev.ClientId
+			if ev.clientId > maxClientId {
+				maxClientId = ev.clientId
 			}
 		}
 
@@ -482,12 +484,20 @@ func checkEvents(model Model, consistency Consistency, history EventHistory, ver
 	return checkParallel(model, consistency, operationHistories, l, verbose, timeout)
 }
 
-func checkOperations(model Model, consistency Consistency, history OperationHistory, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func checkOperations(model Model, consistency Consistency, history []Operation, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	model = fillDefault(model)
-	partitions := model.Partition(history)
-	l := make([]entries, len(history))
-	for i, subhistory := range partitions {
-		l[i] = makeEntries(subhistory)
+	maxClientId := 0
+	for _, op := range history {
+		if op.ClientId > maxClientId {
+			maxClientId = op.ClientId
+		}
 	}
-	return checkParallel(model, consistency, partitions, l, verbose, timeout)
+	partitions := model.Partition(history)
+	l := make([]entries, len(partitions))
+	operationHistories := make([]OperationHistory, len(partitions))
+
+	for i, subhistory := range partitions {
+		l[i], operationHistories[i] = makeEntries(subhistory, maxClientId+1)
+	}
+	return checkParallel(model, consistency, operationHistories, l, verbose, timeout)
 }
