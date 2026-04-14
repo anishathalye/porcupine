@@ -4,28 +4,29 @@ import (
 	"sync/atomic"
 )
 
-type OperationHistory [][]clientOperation
+type OperationHistory [][]ClientOperation
 
-type clientOperation struct {
-	op      Operation
-	id      int   // global operation id
-	start   []int // start[c] is the index of the first operation from client c that has no outgoing dependency to this op
-	visited bool  // whether the start of this op has been computed
+type ClientOperation struct {
+	Op      Operation
+	Id      int                    // global operation id
+	Start   []int                  // start[c] is the index of the first operation from client c that has no outgoing dependency to this op
+	Visited bool                   // whether the start of this op has been computed
+	Params  map[string]interface{} // parameters set by oracle preprocessors
 }
 
-func newclientOperation(op Operation, numClients int, id int) clientOperation {
-	return clientOperation{op: op, start: nil, visited: false, id: id}
+func newclientOperation(op Operation, numClients int, id int) ClientOperation {
+	return ClientOperation{Op: op, Start: nil, Visited: false, Id: id}
 }
 
 type client struct {
 	id     int
-	cltOps []clientOperation // operations by this client
+	cltOps []ClientOperation // operations by this client
 	head   int               // head is not pushed to the stack yet
 	nDeps  int               // number of unsatisfied dependencies for operation at head
 }
 
 func (ch *chains) computeStart(c int, consistency Consistency) {
-	if ch.clients[c].head >= len(ch.clients[c].cltOps) || ch.clients[c].cltOps[ch.clients[c].head].visited {
+	if ch.clients[c].head >= len(ch.clients[c].cltOps) || ch.clients[c].cltOps[ch.clients[c].head].Visited {
 		return
 	}
 	op := &ch.clients[c].cltOps[ch.clients[c].head]
@@ -37,12 +38,12 @@ func (ch *chains) computeStart(c int, consistency Consistency) {
 		}
 		start := 0
 		if ch.clients[c].head > 0 {
-			start = ch.clients[c].cltOps[ch.clients[c].head-1].start[d]
+			start = ch.clients[c].cltOps[ch.clients[c].head-1].Start[d]
 		}
 		i := start
 		step := 1
 		for i < len(ch.clients[d].cltOps) {
-			order, err := consistency.Check(&ch.clients[d].cltOps[i].op, &op.op)
+			order, err := consistency.Check(&ch.clients[d].cltOps[i], op)
 			if err != nil {
 				panic(err)
 			}
@@ -63,7 +64,7 @@ func (ch *chains) computeStart(c int, consistency Consistency) {
 		}
 		for low < high {
 			mid := low + (high-low)/2
-			order, err := consistency.Check(&ch.clients[d].cltOps[mid].op, &op.op)
+			order, err := consistency.Check(&ch.clients[d].cltOps[mid], op)
 			if err != nil {
 				panic(err)
 			}
@@ -73,9 +74,9 @@ func (ch *chains) computeStart(c int, consistency Consistency) {
 				high = mid
 			}
 		}
-		op.start[d] = low
+		op.Start[d] = low
 	}
-	op.visited = true
+	op.Visited = true
 }
 
 type chains struct {
@@ -91,8 +92,8 @@ func (ch *chains) addToFrontier(c int, consistency Consistency) {
 		}
 	}
 	for i, v := range ch.frontier {
-		opC := &ch.clients[c].cltOps[ch.clients[c].head].op
-		opV := &ch.clients[v].cltOps[ch.clients[v].head].op
+		opC := &ch.clients[c].cltOps[ch.clients[c].head]
+		opV := &ch.clients[v].cltOps[ch.clients[v].head]
 		order, err := consistency.Check(opC, opV)
 		if err != nil {
 			panic(err)
@@ -143,7 +144,7 @@ func newChains(history OperationHistory, consistency Consistency) chains {
 	starts := make([]int, n*numClients)
 	for i := 0; i < numClients; i++ {
 		for j := 0; j < len(clients[i].cltOps); j++ {
-			clients[i].cltOps[j].start = starts[clients[i].cltOps[j].id*numClients : (clients[i].cltOps[j].id+1)*numClients]
+			clients[i].cltOps[j].Start = starts[clients[i].cltOps[j].Id*numClients : (clients[i].cltOps[j].Id+1)*numClients]
 		}
 	}
 
@@ -154,7 +155,7 @@ func newChains(history OperationHistory, consistency Consistency) chains {
 		if len(ch.clients[i].cltOps) > 0 {
 			op := ch.clients[i].cltOps[0]
 			for j := 0; j < numClients; j++ {
-				if j != i && op.start[j] > 0 {
+				if j != i && op.Start[j] > 0 {
 					ch.clients[i].nDeps++
 				}
 			}
@@ -183,19 +184,19 @@ func (c *client) lift(model Model, oldState interface{}, stack *[]stackEntry,
 	cache map[uint64][]cacheEntry, serialized *bitset) (interface{}, bool) {
 	// Is this allowed by the sequential specification?
 	cltOp := c.cltOps[c.head]
-	ok, newState := model.Step(oldState, cltOp.op.Input, cltOp.op.Output)
+	ok, newState := model.Step(oldState, cltOp.Op.Input, cltOp.Op.Output)
 	if !ok {
 		return newState, ok
 	}
 
 	// check cache
-	serialized.set(uint(cltOp.id))
+	serialized.set(uint(cltOp.Id))
 	hash := serialized.hash()
 
 	if entries, ok := cache[hash]; ok {
 		for _, elem := range entries {
 			if serialized.equals(elem.linearized) && model.Equal(newState, elem.state) {
-				serialized.clear(uint(cltOp.id))
+				serialized.clear(uint(cltOp.Id))
 				return oldState, false
 			}
 		}
@@ -203,7 +204,7 @@ func (c *client) lift(model Model, oldState interface{}, stack *[]stackEntry,
 
 	cache[hash] = append(cache[hash], cacheEntry{serialized.clone(), newState})
 	e := stackEntry{
-		opId:     cltOp.id,
+		opId:     cltOp.Id,
 		clientId: c.id,
 		state:    oldState,
 		opIdx:    c.head,
@@ -239,7 +240,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 				opI := ch.clients[i].cltOps[ch.clients[i].head]
 				ch.clients[i].nDeps = 0
 				for k := 0; k < len(ch.clients); k++ {
-					if k != i && opI.start[k] > ch.clients[k].head {
+					if k != i && opI.Start[k] > ch.clients[k].head {
 						ch.clients[i].nDeps++
 					}
 				}
@@ -250,7 +251,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 
 			for j := 0; j < len(ch.clients); j++ {
 				if j != i && ch.clients[j].head < len(ch.clients[j].cltOps) {
-					if ch.clients[j].cltOps[ch.clients[j].head].start[i] == ch.clients[i].head {
+					if ch.clients[j].cltOps[ch.clients[j].head].Start[i] == ch.clients[i].head {
 						ch.clients[j].nDeps--
 						if ch.clients[j].nDeps == 0 {
 							ch.addToFrontier(j, consistency)
@@ -278,7 +279,7 @@ func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset, consistency Co
 
 	for j := 0; j < len(ch.clients); j++ {
 		if j != clientId && ch.clients[j].head < len(ch.clients[j].cltOps) {
-			if ch.clients[j].cltOps[ch.clients[j].head].start[clientId] == ch.clients[clientId].head+1 {
+			if ch.clients[j].cltOps[ch.clients[j].head].Start[clientId] == ch.clients[clientId].head+1 {
 				if ch.clients[j].nDeps == 0 {
 					ch.removeFromFrontier(j)
 				}

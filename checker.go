@@ -21,6 +21,7 @@ type entry struct {
 	clientId int
 	opKind   OperationKind
 	metadata interface{}
+	hint     interface{}
 }
 
 type entries []entry
@@ -132,9 +133,14 @@ func makeEntries(history []Operation, numClients int) (entries, OperationHistory
 	operationHistory := make(OperationHistory, numClients)
 	for _, elem := range history {
 		entries = append(entries, entry{
-			callEntry, elem.Input, id, elem.Call, elem.ClientId, elem.OpKind, elem.Metadata})
+			kind: callEntry, value: elem.Input, id: id, time: elem.Call,
+			clientId: elem.ClientId, opKind: elem.OpKind, metadata: elem.Metadata,
+		})
 		entries = append(entries, entry{
-			returnEntry, elem.Output, id, elem.Return, elem.ClientId, elem.OpKind, elem.Metadata})
+			kind: returnEntry, value: elem.Output, id: id, time: elem.Return,
+			clientId: elem.ClientId, opKind: elem.OpKind, metadata: elem.Metadata,
+			hint: elem.OrderHint,
+		})
 		clientOp := newclientOperation(elem, numClients, id)
 		operationHistory[elem.ClientId] = append(operationHistory[elem.ClientId], clientOp)
 		id++
@@ -164,24 +170,15 @@ func insertBefore(n *node, mark *node) *node {
 	return n
 }
 
-func length(n *node) int {
-	l := 0
-	for n != nil {
-		n = n.next
-		l++
-	}
-	return l
-}
-
 func renumber(events []Event) []Event {
 	var e []Event
 	m := make(map[int]int) // renumbering
 	id := 0
 	for _, v := range events {
 		if r, ok := m[v.Id]; ok {
-			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: r, Metadata: v.Metadata})
+			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: r, Metadata: v.Metadata, OpKind: v.OpKind, Hint: v.Hint})
 		} else {
-			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: id, Metadata: v.Metadata})
+			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: id, Metadata: v.Metadata, OpKind: v.OpKind, Hint: v.Hint})
 			m[v.Id] = id
 			id++
 		}
@@ -198,7 +195,16 @@ func convertEntries(events []Event) (entries, int) {
 			kind = returnEntry
 		}
 		// use index as "time"
-		entries = append(entries, entry{kind, elem.Value, elem.Id, int64(i), elem.ClientId, elem.OpKind, elem.Metadata})
+		entries = append(entries, entry{
+			kind:     kind,
+			value:    elem.Value,
+			id:       elem.Id,
+			time:     int64(i),
+			clientId: elem.ClientId,
+			opKind:   elem.OpKind,
+			metadata: elem.Metadata,
+			hint:     elem.Hint,
+		})
 		if elem.ClientId > maxClientId {
 			maxClientId = elem.ClientId
 		}
@@ -452,8 +458,8 @@ func checkEvents(model Model, consistency Consistency, history []Event, verbose 
 	var numClients int
 	for i, subhistory := range partitions {
 		l[i], numClients = convertEntries(renumber(subhistory))
-		operationHistory := make([][]clientOperation, 0)
-		clientOperations := make(map[int][]clientOperation)
+		operationHistory := make([][]ClientOperation, 0)
+		clientOperations := make(map[int][]ClientOperation)
 		maxClientId := 0
 		for j, ev := range l[i] {
 			if ev.kind == false {
@@ -466,8 +472,9 @@ func checkEvents(model Model, consistency Consistency, history []Event, verbose 
 				clientOperations[ev.clientId] = append(clientOperations[ev.clientId], newclientOperation(op, numClients, ev.id))
 			} else {
 				call := clientOperations[ev.clientId][len(clientOperations[ev.clientId])-1]
-				call.op.Output = ev.value
-				call.op.Return = int64(j)
+				call.Op.Output = ev.value
+				call.Op.Return = int64(j)
+				call.Op.OrderHint = ev.hint
 				clientOperations[ev.clientId][len(clientOperations[ev.clientId])-1] = call
 			}
 			if ev.clientId > maxClientId {
@@ -479,6 +486,10 @@ func checkEvents(model Model, consistency Consistency, history []Event, verbose 
 			operationHistory = append(operationHistory, clientOperations[i])
 		}
 		operationHistories = append(operationHistories, operationHistory)
+	}
+
+	for i := range operationHistories {
+		consistency.Preprocess(operationHistories[i])
 	}
 
 	return checkParallel(model, consistency, operationHistories, l, verbose, timeout)
@@ -498,6 +509,9 @@ func checkOperations(model Model, consistency Consistency, history []Operation, 
 
 	for i, subhistory := range partitions {
 		l[i], operationHistories[i] = makeEntries(subhistory, maxClientId+1)
+	}
+	for i := range operationHistories {
+		consistency.Preprocess(operationHistories[i])
 	}
 	return checkParallel(model, consistency, operationHistories, l, verbose, timeout)
 }
