@@ -28,11 +28,16 @@ type Oracle struct {
 	Compare func(a *ClientOperation, b *ClientOperation) (OrderKind, error)
 }
 
+type Validity struct {
+	Init func(model Model) interface{}
+	Step func(state interface{}, input interface{}, output interface{}, model Model) (bool, interface{})
+}
+
 type Consistency struct {
 	// e.g., linearizability; etcd revision number, etc
 	Oracles []Oracle
 	// e.g. RVal
-	Valid func(interface{}, interface{}, interface{}, func(interface{}, interface{}, interface{}) (bool, interface{})) (bool, interface{})
+	Valid Validity
 }
 
 func (c *Consistency) Check(a *ClientOperation, b *ClientOperation) (OrderKind, error) {
@@ -163,15 +168,13 @@ var RealTimeWrites = Oracle{
 
 var OrderedSequentialConsistencyOracles = []Oracle{RealTimeWrites, GeneralLikely}
 
-func RVal(state interface{}, input interface{}, output interface{}, step func(interface{}, interface{}, interface{}) (bool, interface{})) (bool, interface{}) {
-	ok, newState := step(state, input, output)
-	if !ok {
-		return false, nil
-	}
-	if input == output {
-		return true, newState
-	}
-	return false, nil
+var RVal = Validity{
+	Init: func(model Model) interface{} {
+		return model.Init()
+	},
+	Step: func(state interface{}, input interface{}, output interface{}, model Model) (bool, interface{}) {
+		return model.Step(state, input, output)
+	},
 }
 
 var Linearizability = Consistency{

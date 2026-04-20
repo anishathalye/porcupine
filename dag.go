@@ -180,11 +180,11 @@ type stackEntry struct { // entry in the stack
 
 // Try to lift the operation at the head of this client. If successful, push
 // it on the stack and return the new state.
-func (c *client) lift(model Model, oldState interface{}, stack *[]stackEntry,
+func (c *client) lift(model Model, consistency Consistency, oldState interface{}, stack *[]stackEntry,
 	cache map[uint64][]cacheEntry, serialized *bitset) (interface{}, bool) {
 	// Is this allowed by the sequential specification?
 	cltOp := c.cltOps[c.head]
-	ok, newState := model.Step(oldState, cltOp.Op.Input, cltOp.Op.Output)
+	ok, newState := consistency.Valid.Step(oldState, cltOp.Op.Input, cltOp.Op.Output, model)
 	if !ok {
 		return newState, ok
 	}
@@ -229,7 +229,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 	// Try to lift an operation from the frontier starting from "liftFrom"
 	for idx := liftFrom; idx >= 0; idx-- {
 		i := ch.frontier[idx]
-		newState, success := ch.clients[i].lift(model, oldState, stack, cache, serialized)
+		newState, success := ch.clients[i].lift(model, consistency, oldState, stack, cache, serialized)
 		if success {
 			(*stack)[len(*stack)-1].frontierIdx = idx
 			ch.computeStart(i, consistency)
@@ -300,7 +300,7 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
 
 	stack := []stackEntry{}
-	state := model.Init() // initial state
+	state := consistency.Valid.Init(model) // initial state
 
 	longest := make([]*[]int, ch.numOps)
 
