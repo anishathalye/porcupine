@@ -2,7 +2,7 @@ package porcupine
 
 import (
 	"errors" 
-	"strconv"
+	"fmt"
 )
 
 // OrderKind represents the kind of precedence relationship between two operations
@@ -50,12 +50,12 @@ func (c *Consistency) Check(a *ClientOperation, b *ClientOperation) (OrderKind, 
 		switch order {
 		case HardAfter:
 			if ok == HardBefore {
-				return ok, errors.New("conflicting order constraints" + " " + strconv.Itoa(a.Id) + " vs " + strconv.Itoa(b.Id))
+				return ok, errors.New("conflicting order constraints:\n" + fmt.Sprintf("%+v", a) + "\n" + fmt.Sprintf("%+v", b)) 
 			}
 			ok = HardAfter
 		case HardBefore:
 			if ok == HardAfter {
-				return ok, errors.New("conflicting order constraints" + " " + strconv.Itoa(a.Id) + " vs " + strconv.Itoa(b.Id))
+				return ok, errors.New("conflicting order constraints:\n" + fmt.Sprintf("%+v", a) + "\n" + fmt.Sprintf("%+v", b)) 
 			}
 			ok = HardBefore
 		case SoftAfter:
