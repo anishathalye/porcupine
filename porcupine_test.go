@@ -2,6 +2,7 @@ package porcupine
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,7 +10,10 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type registerInput struct {
@@ -122,6 +126,92 @@ func TestZeroDuration(t *testing.T) {
 	if res != Illegal {
 		t.Fatal("expected operations to not be linearizable")
 	}
+}
+
+func TestTimeoutCancelsStepContext(t *testing.T) {
+	var stepCalls int32
+	model := Model{
+		Init: func() interface{} {
+			return 0
+		},
+		Step: func(state, input, output interface{}) (bool, interface{}) {
+			atomic.AddInt32(&stepCalls, 1)
+			return true, state
+		},
+		StepContext: func(ctx context.Context, state, input, output interface{}) (bool, interface{}) {
+			<-ctx.Done()
+			return false, nil
+		},
+	}
+	ops := []Operation{
+		{ClientId: 0, Input: "input", Call: 0, Output: "output", Return: 1},
+	}
+
+	res, _ := CheckOperationsVerbose(model, ops, 20*time.Millisecond)
+
+	if res != Unknown {
+		t.Fatalf("expected timeout result %v, got %v", Unknown, res)
+	}
+	if calls := atomic.LoadInt32(&stepCalls); calls != 0 {
+		t.Fatalf("expected StepContext to be used instead of Step, Step calls: %d", calls)
+	}
+}
+
+func TestIllegalCancelsBlockedPartition(t *testing.T) {
+	type partitionedInput struct {
+		key string
+	}
+
+	started := make(chan struct{})
+	var blockedDone sync.WaitGroup
+	blockedDone.Add(1)
+	model := Model{
+		Partition: func(history []Operation) [][]Operation {
+			var blocked, illegal []Operation
+			for _, op := range history {
+				switch op.Input.(partitionedInput).key {
+				case "blocked":
+					blocked = append(blocked, op)
+				case "illegal":
+					illegal = append(illegal, op)
+				}
+			}
+			return [][]Operation{blocked, illegal}
+		},
+		Init: func() interface{} {
+			return nil
+		},
+		Step: func(state, input, output interface{}) (bool, interface{}) {
+			t.Fatal("expected StepContext to be used instead of Step")
+			return false, nil
+		},
+		StepContext: func(ctx context.Context, state, input, output interface{}) (bool, interface{}) {
+			switch input.(partitionedInput).key {
+			case "blocked":
+				defer blockedDone.Done()
+				close(started)
+				<-ctx.Done()
+				return false, nil
+			case "illegal":
+				<-started
+				return false, nil
+			default:
+				t.Fatalf("unexpected key %q", input.(partitionedInput).key)
+				return false, nil
+			}
+		},
+	}
+	ops := []Operation{
+		{ClientId: 0, Input: partitionedInput{key: "blocked"}, Call: 0, Output: nil, Return: 1},
+		{ClientId: 1, Input: partitionedInput{key: "illegal"}, Call: 0, Output: nil, Return: 1},
+	}
+
+	res := CheckOperationsTimeout(model, ops, 0)
+
+	if res != Illegal {
+		t.Fatalf("expected result %v, got %v", Illegal, res)
+	}
+	blockedDone.Wait()
 }
 
 type etcdInput struct {
@@ -1694,6 +1784,116 @@ func TestNondeterministicRegisterModel(t *testing.T) {
 	}
 
 	visualizeTempFile(t, model, info)
+}
+
+func TestNondeterministicModelToModelUsesStepContext(t *testing.T) {
+	var stepCalls int32
+	nondeterministicModel := NondeterministicModel{
+		Init: func() []interface{} {
+			return []interface{}{0, 1}
+		},
+		Step: func(state interface{}, input interface{}, output interface{}) []interface{} {
+			t.Fatal("expected StepContext to be used instead of Step")
+			return nil
+		},
+		StepContext: func(ctx context.Context, state interface{}, input interface{}, output interface{}) []interface{} {
+			atomic.AddInt32(&stepCalls, 1)
+			if ctx.Err() != nil {
+				return nil
+			}
+			return []interface{}{state.(int) + 1}
+		},
+		Equal: func(state1 interface{}, state2 interface{}) bool {
+			return state1.(int) == state2.(int)
+		},
+	}
+	model := nondeterministicModel.ToModel()
+
+	ok, newState := model.StepContext(context.Background(), model.Init(), nil, nil)
+	if !ok {
+		t.Fatal("expected context-aware nondeterministic step to succeed")
+	}
+	if !reflect.DeepEqual(newState, []interface{}{1, 2}) {
+		t.Fatalf("expected next states %v, got %v", []interface{}{1, 2}, newState)
+	}
+	if calls := atomic.LoadInt32(&stepCalls); calls != 2 {
+		t.Fatalf("expected one StepContext call per initial state, got %d", calls)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	ok, _ = model.StepContext(ctx, model.Init(), nil, nil)
+	if ok {
+		t.Fatal("expected canceled context-aware nondeterministic step to fail")
+	}
+	if calls := atomic.LoadInt32(&stepCalls); calls != 2 {
+		t.Fatalf("expected canceled context to stop before calling StepContext, got %d calls", calls)
+	}
+}
+
+func TestNondeterministicModelToModelStopsAfterMidIterationCancellation(t *testing.T) {
+	var calls []int
+	ctx, cancel := context.WithCancel(context.Background())
+	nondeterministicModel := NondeterministicModel{
+		Init: func() []interface{} {
+			return []interface{}{0, 1}
+		},
+		Step: func(state interface{}, input interface{}, output interface{}) []interface{} {
+			t.Fatal("expected StepContext to be used instead of Step")
+			return nil
+		},
+		StepContext: func(ctx context.Context, state interface{}, input interface{}, output interface{}) []interface{} {
+			s := state.(int)
+			calls = append(calls, s)
+			if s == 0 {
+				cancel()
+			}
+			return []interface{}{s + 1}
+		},
+		Equal: func(state1 interface{}, state2 interface{}) bool {
+			return state1.(int) == state2.(int)
+		},
+	}
+	model := nondeterministicModel.ToModel()
+
+	ok, newState := model.StepContext(ctx, model.Init(), nil, nil)
+	if ok {
+		t.Fatal("expected mid-iteration cancellation to fail")
+	}
+	if newState != nil {
+		t.Fatalf("expected no next state after cancellation, got %v", newState)
+	}
+	if !reflect.DeepEqual(calls, []int{0}) {
+		t.Fatalf("expected cancellation to stop after first state, got calls %v", calls)
+	}
+}
+
+func TestNondeterministicModelToModelWrapsStep(t *testing.T) {
+	var stepCalls int32
+	nondeterministicModel := NondeterministicModel{
+		Init: func() []interface{} {
+			return []interface{}{1}
+		},
+		Step: func(state interface{}, input interface{}, output interface{}) []interface{} {
+			atomic.AddInt32(&stepCalls, 1)
+			return []interface{}{state.(int) + 1}
+		},
+		Equal: func(state1 interface{}, state2 interface{}) bool {
+			return state1.(int) == state2.(int)
+		},
+	}
+	model := nondeterministicModel.ToModel()
+
+	ok, newState := model.StepContext(context.Background(), model.Init(), nil, nil)
+	if !ok {
+		t.Fatal("expected legacy nondeterministic step to succeed")
+	}
+	if !reflect.DeepEqual(newState, []interface{}{2}) {
+		t.Fatalf("expected next state %v, got %v", []interface{}{2}, newState)
+	}
+	if calls := atomic.LoadInt32(&stepCalls); calls != 1 {
+		t.Fatalf("expected legacy Step to be called once, got %d", calls)
+	}
 }
 
 func TestCheckNoPartitions(t *testing.T) {

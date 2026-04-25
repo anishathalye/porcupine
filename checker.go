@@ -1,8 +1,8 @@
 package porcupine
 
 import (
+	"context"
 	"sort"
-	"sync/atomic"
 	"time"
 )
 
@@ -254,7 +254,7 @@ func unlift(entry *node) {
 	entry.next.prev = entry
 }
 
-func checkSingle(model Model, history []entry, computePartial bool, kill *int32) (bool, []*[]int) {
+func checkSingle(ctx context.Context, model Model, history []entry, computePartial bool) (bool, []*[]int) {
 	entry := makeLinkedEntries(history)
 	n := length(entry) / 2
 	linearized := newBitset(uint(n))
@@ -266,12 +266,15 @@ func checkSingle(model Model, history []entry, computePartial bool, kill *int32)
 	state := model.Init()
 	headEntry := insertBefore(&node{value: nil, match: nil, id: -1}, entry)
 	for headEntry.next != nil {
-		if atomic.LoadInt32(kill) != 0 {
+		if ctx.Err() != nil {
 			return false, longest
 		}
 		if entry.match != nil {
 			matching := entry.match // the return entry
-			ok, newState := model.Step(state, entry.value, matching.value)
+			ok, newState := model.StepContext(ctx, state, entry.value, matching.value)
+			if ctx.Err() != nil {
+				return false, longest
+			}
 			if ok {
 				newLinearized := linearized.clone().set(uint(entry.id))
 				newCacheEntry := cacheEntry{newLinearized, newState}
@@ -349,6 +352,19 @@ func fillDefault(model Model) Model {
 	if model.DescribeOperationMetadata == nil {
 		model.DescribeOperationMetadata = defaultDescribeOperationMetadata
 	}
+	switch {
+	case model.Step == nil && model.StepContext == nil:
+		panic("model must define Step or StepContext")
+	case model.Step == nil:
+		ctx := context.Background()
+		model.Step = func(state, input, output interface{}) (bool, interface{}) {
+			return model.StepContext(ctx, state, input, output)
+		}
+	case model.StepContext == nil:
+		model.StepContext = func(ctx context.Context, state interface{}, input interface{}, output interface{}) (bool, interface{}) {
+			return model.Step(state, input, output)
+		}
+	}
 	return model
 }
 
@@ -358,12 +374,13 @@ func checkParallel(model Model, history [][]entry, computeInfo bool, timeout tim
 	}
 	ok := true
 	timedOut := false
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	results := make(chan bool, len(history))
 	longest := make([][]*[]int, len(history))
-	kill := int32(0)
 	for i, subhistory := range history {
 		go func(i int, subhistory []entry) {
-			ok, l := checkSingle(model, subhistory, computeInfo, &kill)
+			ok, l := checkSingle(ctx, model, subhistory, computeInfo)
 			longest[i] = l
 			results <- ok
 		}(i, subhistory)
@@ -380,7 +397,7 @@ loop:
 			count++
 			ok = ok && result
 			if !ok && !computeInfo {
-				atomic.StoreInt32(&kill, 1)
+				cancel()
 				break loop
 			}
 			if count >= len(history) {
@@ -388,7 +405,7 @@ loop:
 			}
 		case <-timeoutChan:
 			timedOut = true
-			atomic.StoreInt32(&kill, 1)
+			cancel()
 			break loop // if we time out, we might get a false positive
 		}
 	}
