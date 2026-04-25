@@ -1,6 +1,7 @@
 package porcupine
 
 import (
+	"context"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -254,7 +255,14 @@ func unlift(entry *node) {
 	entry.next.prev = entry
 }
 
-func checkSingle(model Model, history []entry, computePartial bool, kill *int32) (bool, []*[]int) {
+func modelStep(ctx context.Context, model Model, state interface{}, input interface{}, output interface{}) (bool, interface{}) {
+	if model.StepContext != nil {
+		return model.StepContext(ctx, state, input, output)
+	}
+	return model.Step(state, input, output)
+}
+
+func checkSingle(ctx context.Context, model Model, history []entry, computePartial bool, kill *int32) (bool, []*[]int) {
 	entry := makeLinkedEntries(history)
 	n := length(entry) / 2
 	linearized := newBitset(uint(n))
@@ -266,12 +274,15 @@ func checkSingle(model Model, history []entry, computePartial bool, kill *int32)
 	state := model.Init()
 	headEntry := insertBefore(&node{value: nil, match: nil, id: -1}, entry)
 	for headEntry.next != nil {
-		if atomic.LoadInt32(kill) != 0 {
+		if atomic.LoadInt32(kill) != 0 || ctx.Err() != nil {
 			return false, longest
 		}
 		if entry.match != nil {
 			matching := entry.match // the return entry
-			ok, newState := model.Step(state, entry.value, matching.value)
+			ok, newState := modelStep(ctx, model, state, entry.value, matching.value)
+			if ctx.Err() != nil {
+				return false, longest
+			}
 			if ok {
 				newLinearized := linearized.clone().set(uint(entry.id))
 				newCacheEntry := cacheEntry{newLinearized, newState}
@@ -358,12 +369,14 @@ func checkParallel(model Model, history [][]entry, computeInfo bool, timeout tim
 	}
 	ok := true
 	timedOut := false
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	results := make(chan bool, len(history))
 	longest := make([][]*[]int, len(history))
 	kill := int32(0)
 	for i, subhistory := range history {
 		go func(i int, subhistory []entry) {
-			ok, l := checkSingle(model, subhistory, computeInfo, &kill)
+			ok, l := checkSingle(ctx, model, subhistory, computeInfo, &kill)
 			longest[i] = l
 			results <- ok
 		}(i, subhistory)
@@ -381,6 +394,7 @@ loop:
 			ok = ok && result
 			if !ok && !computeInfo {
 				atomic.StoreInt32(&kill, 1)
+				cancel()
 				break loop
 			}
 			if count >= len(history) {
@@ -389,6 +403,7 @@ loop:
 		case <-timeoutChan:
 			timedOut = true
 			atomic.StoreInt32(&kill, 1)
+			cancel()
 			break loop // if we time out, we might get a false positive
 		}
 	}

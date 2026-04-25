@@ -2,6 +2,7 @@ package porcupine
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,7 +10,9 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type registerInput struct {
@@ -17,110 +20,184 @@ type registerInput struct {
 	value int
 }
 
+func registerInit() interface{} {
+	return 0
+}
+
+// step function: takes a state, input, and output, and returns whether it
+// was a legal operation, along with a new state
+func registerStep(state, input, output interface{}) (bool, interface{}) {
+	regInput := input.(registerInput)
+	if regInput.op == false {
+		return true, regInput.value // always ok to execute a put
+	}
+	readCorrectValue := output == state
+	return readCorrectValue, state // state is unchanged
+}
+
+func describeRegisterOperation(input, output interface{}) string {
+	inp := input.(registerInput)
+	switch inp.op {
+	case true:
+		return fmt.Sprintf("get() -> '%d'", output.(int))
+	case false:
+		return fmt.Sprintf("put('%d')", inp.value)
+	}
+	return "<invalid>" // unreachable
+}
+
 // a sequential specification of a register
 var registerModel = Model{
-	Init: func() interface{} {
-		return 0
+	Init:              registerInit,
+	Step:              registerStep,
+	DescribeOperation: describeRegisterOperation,
+}
+
+var registerStepContextModel = Model{
+	Init: registerInit,
+	StepContext: func(_ context.Context, state, input, output interface{}) (bool, interface{}) {
+		return registerStep(state, input, output)
 	},
-	// step function: takes a state, input, and output, and returns whether it
-	// was a legal operation, along with a new state
-	Step: func(state, input, output interface{}) (bool, interface{}) {
-		regInput := input.(registerInput)
-		if regInput.op == false {
-			return true, regInput.value // always ok to execute a put
-		} else {
-			readCorrectValue := output == state
-			return readCorrectValue, state // state is unchanged
-		}
-	},
-	DescribeOperation: func(input, output interface{}) string {
-		inp := input.(registerInput)
-		switch inp.op {
-		case true:
-			return fmt.Sprintf("get() -> '%d'", output.(int))
-		case false:
-			return fmt.Sprintf("put('%d')", inp.value)
-		}
-		return "<invalid>" // unreachable
-	},
+	DescribeOperation: describeRegisterOperation,
+}
+
+type registerModelVariant struct {
+	name  string
+	model Model
+}
+
+func registerModelVariants() []registerModelVariant {
+	return []registerModelVariant{
+		{"step", registerModel},
+		{"step_context", registerStepContextModel},
+	}
 }
 
 func TestRegisterModel(t *testing.T) {
 	// examples taken from http://nil.csail.mit.edu/6.824/2017/quizzes/q2-17-ans.pdf
 	// section VII
 
-	ops := []Operation{
-		{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100},
-		{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75},
-		{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 60},
-	}
-	res := CheckOperations(registerModel, ops)
-	if res != true {
-		t.Fatal("expected operations to be linearizable")
-	}
+	for _, tt := range registerModelVariants() {
+		t.Run(tt.name, func(t *testing.T) {
+			model := tt.model
 
-	// same example as above, but with Event
-	events := []Event{
-		{ClientId: 0, Kind: CallEvent, Value: registerInput{false, 100}, Id: 0},
-		{ClientId: 1, Kind: CallEvent, Value: registerInput{true, 0}, Id: 1},
-		{ClientId: 2, Kind: CallEvent, Value: registerInput{true, 0}, Id: 2},
-		{ClientId: 2, Kind: ReturnEvent, Value: 0, Id: 2},
-		{ClientId: 1, Kind: ReturnEvent, Value: 100, Id: 1},
-		{ClientId: 0, Kind: ReturnEvent, Value: 0, Id: 0},
-	}
-	res = CheckEvents(registerModel, events)
-	if res != true {
-		t.Fatal("expected operations to be linearizable")
-	}
+			ops := []Operation{
+				{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100},
+				{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75},
+				{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 60},
+			}
+			res := CheckOperations(model, ops)
+			if res != true {
+				t.Fatal("expected operations to be linearizable")
+			}
 
-	ops = []Operation{
-		{ClientId: 0, Input: registerInput{false, 200}, Call: 0, Output: 0, Return: 100},
-		{ClientId: 1, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 30},
-		{ClientId: 2, Input: registerInput{true, 0}, Call: 40, Output: 0, Return: 90},
-	}
-	res = CheckOperations(registerModel, ops)
-	if res != false {
-		t.Fatal("expected operations to not be linearizable")
-	}
+			// same example as above, but with Event
+			events := []Event{
+				{ClientId: 0, Kind: CallEvent, Value: registerInput{false, 100}, Id: 0},
+				{ClientId: 1, Kind: CallEvent, Value: registerInput{true, 0}, Id: 1},
+				{ClientId: 2, Kind: CallEvent, Value: registerInput{true, 0}, Id: 2},
+				{ClientId: 2, Kind: ReturnEvent, Value: 0, Id: 2},
+				{ClientId: 1, Kind: ReturnEvent, Value: 100, Id: 1},
+				{ClientId: 0, Kind: ReturnEvent, Value: 0, Id: 0},
+			}
+			res = CheckEvents(model, events)
+			if res != true {
+				t.Fatal("expected operations to be linearizable")
+			}
 
-	// same example as above, but with Event
-	events = []Event{
-		{ClientId: 0, Kind: CallEvent, Value: registerInput{false, 200}, Id: 0},
-		{ClientId: 1, Kind: CallEvent, Value: registerInput{true, 0}, Id: 1},
-		{ClientId: 1, Kind: ReturnEvent, Value: 200, Id: 1},
-		{ClientId: 2, Kind: CallEvent, Value: registerInput{true, 0}, Id: 2},
-		{ClientId: 2, Kind: ReturnEvent, Value: 0, Id: 2},
-		{ClientId: 0, Kind: ReturnEvent, Value: 0, Id: 0},
-	}
-	res = CheckEvents(registerModel, events)
-	if res != false {
-		t.Fatal("expected operations to not be linearizable")
+			ops = []Operation{
+				{ClientId: 0, Input: registerInput{false, 200}, Call: 0, Output: 0, Return: 100},
+				{ClientId: 1, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 30},
+				{ClientId: 2, Input: registerInput{true, 0}, Call: 40, Output: 0, Return: 90},
+			}
+			res = CheckOperations(model, ops)
+			if res != false {
+				t.Fatal("expected operations to not be linearizable")
+			}
+
+			// same example as above, but with Event
+			events = []Event{
+				{ClientId: 0, Kind: CallEvent, Value: registerInput{false, 200}, Id: 0},
+				{ClientId: 1, Kind: CallEvent, Value: registerInput{true, 0}, Id: 1},
+				{ClientId: 1, Kind: ReturnEvent, Value: 200, Id: 1},
+				{ClientId: 2, Kind: CallEvent, Value: registerInput{true, 0}, Id: 2},
+				{ClientId: 2, Kind: ReturnEvent, Value: 0, Id: 2},
+				{ClientId: 0, Kind: ReturnEvent, Value: 0, Id: 0},
+			}
+			res = CheckEvents(model, events)
+			if res != false {
+				t.Fatal("expected operations to not be linearizable")
+			}
+		})
 	}
 }
 
 func TestZeroDuration(t *testing.T) {
+	for _, tt := range registerModelVariants() {
+		t.Run(tt.name, func(t *testing.T) {
+			model := tt.model
+
+			ops := []Operation{
+				{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100},
+				{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75},
+				{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 30},
+				{ClientId: 3, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 30},
+			}
+			res, info := CheckOperationsVerbose(model, ops, 0)
+			if res != Ok {
+				t.Fatal("expected operations to be linearizable")
+			}
+
+			visualizeTempFile(t, model, info)
+
+			ops = []Operation{
+				{ClientId: 0, Input: registerInput{false, 200}, Call: 0, Output: 0, Return: 100},
+				{ClientId: 1, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 10},
+				{ClientId: 2, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 10},
+				{ClientId: 3, Input: registerInput{true, 0}, Call: 40, Output: 0, Return: 90},
+			}
+			res, _ = CheckOperationsVerbose(model, ops, 0)
+			if res != Illegal {
+				t.Fatal("expected operations to not be linearizable")
+			}
+		})
+	}
+}
+
+func TestVerboseTimeoutCancelsStepContext(t *testing.T) {
+	var stepCalls int32
+	model := Model{
+		Init: func() interface{} {
+			return 0
+		},
+		Step: func(state, input, output interface{}) (bool, interface{}) {
+			atomic.AddInt32(&stepCalls, 1)
+			return true, state
+		},
+		StepContext: func(ctx context.Context, state, input, output interface{}) (bool, interface{}) {
+			select {
+			case <-ctx.Done():
+			case <-time.After(2 * time.Second):
+			}
+			return false, nil
+		},
+	}
 	ops := []Operation{
-		{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100},
-		{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75},
-		{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 30},
-		{ClientId: 3, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 30},
-	}
-	res, info := CheckOperationsVerbose(registerModel, ops, 0)
-	if res != Ok {
-		t.Fatal("expected operations to be linearizable")
+		{ClientId: 0, Input: "input", Call: 0, Output: "output", Return: 1},
 	}
 
-	visualizeTempFile(t, registerModel, info)
+	start := time.Now()
+	res, _ := CheckOperationsVerbose(model, ops, 20*time.Millisecond)
+	elapsed := time.Since(start)
 
-	ops = []Operation{
-		{ClientId: 0, Input: registerInput{false, 200}, Call: 0, Output: 0, Return: 100},
-		{ClientId: 1, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 10},
-		{ClientId: 2, Input: registerInput{true, 0}, Call: 10, Output: 200, Return: 10},
-		{ClientId: 3, Input: registerInput{true, 0}, Call: 40, Output: 0, Return: 90},
+	if res != Unknown {
+		t.Fatalf("expected timeout result %v, got %v", Unknown, res)
 	}
-	res, _ = CheckOperationsVerbose(registerModel, ops, 0)
-	if res != Illegal {
-		t.Fatal("expected operations to not be linearizable")
+	if elapsed > time.Second {
+		t.Fatalf("expected timeout to return promptly, took %s", elapsed)
+	}
+	if calls := atomic.LoadInt32(&stepCalls); calls != 0 {
+		t.Fatalf("expected StepContext to be used instead of Step, Step calls: %d", calls)
 	}
 }
 
@@ -1696,6 +1773,79 @@ func TestNondeterministicRegisterModel(t *testing.T) {
 	visualizeTempFile(t, model, info)
 }
 
+func TestNondeterministicModelToModelUsesStepContext(t *testing.T) {
+	var stepCalls int32
+	nondeterministicModel := NondeterministicModel{
+		Init: func() []interface{} {
+			return []interface{}{0, 1}
+		},
+		Step: func(state interface{}, input interface{}, output interface{}) []interface{} {
+			t.Fatal("expected StepContext to be used instead of Step")
+			return nil
+		},
+		StepContext: func(ctx context.Context, state interface{}, input interface{}, output interface{}) []interface{} {
+			atomic.AddInt32(&stepCalls, 1)
+			if ctx.Err() != nil {
+				return nil
+			}
+			return []interface{}{state.(int) + 1}
+		},
+		Equal: func(state1 interface{}, state2 interface{}) bool {
+			return state1.(int) == state2.(int)
+		},
+	}
+	model := nondeterministicModel.ToModel()
+
+	ok, newState := model.StepContext(context.Background(), model.Init(), nil, nil)
+	if !ok {
+		t.Fatal("expected context-aware nondeterministic step to succeed")
+	}
+	if !reflect.DeepEqual(newState, []interface{}{1, 2}) {
+		t.Fatalf("expected next states %v, got %v", []interface{}{1, 2}, newState)
+	}
+	if calls := atomic.LoadInt32(&stepCalls); calls != 2 {
+		t.Fatalf("expected one StepContext call per initial state, got %d", calls)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	ok, _ = model.StepContext(ctx, model.Init(), nil, nil)
+	if ok {
+		t.Fatal("expected canceled context-aware nondeterministic step to fail")
+	}
+	if calls := atomic.LoadInt32(&stepCalls); calls != 2 {
+		t.Fatalf("expected canceled context to stop before calling StepContext, got %d calls", calls)
+	}
+}
+
+func TestNondeterministicModelToModelWrapsStep(t *testing.T) {
+	var stepCalls int32
+	nondeterministicModel := NondeterministicModel{
+		Init: func() []interface{} {
+			return []interface{}{1}
+		},
+		Step: func(state interface{}, input interface{}, output interface{}) []interface{} {
+			atomic.AddInt32(&stepCalls, 1)
+			return []interface{}{state.(int) + 1}
+		},
+		Equal: func(state1 interface{}, state2 interface{}) bool {
+			return state1.(int) == state2.(int)
+		},
+	}
+	model := nondeterministicModel.ToModel()
+
+	ok, newState := model.StepContext(context.Background(), model.Init(), nil, nil)
+	if !ok {
+		t.Fatal("expected legacy nondeterministic step to succeed")
+	}
+	if !reflect.DeepEqual(newState, []interface{}{2}) {
+		t.Fatalf("expected next state %v, got %v", []interface{}{2}, newState)
+	}
+	if calls := atomic.LoadInt32(&stepCalls); calls != 1 {
+		t.Fatalf("expected legacy Step to be called once, got %d", calls)
+	}
+}
+
 func TestCheckNoPartitions(t *testing.T) {
 	ops := []Operation{}
 	res, _ := CheckOperationsVerbose(kvModel, ops, 0)
@@ -1706,40 +1856,46 @@ func TestCheckNoPartitions(t *testing.T) {
 
 func TestRegisterModelMetadata(t *testing.T) {
 	// similar to TestRegisterModel but with metadata
-	ops := []Operation{
-		{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100, Metadata: "meta1"},
-		{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75, Metadata: "meta2"},
-		{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 60, Metadata: "meta3"},
-	}
-	res, info := CheckOperationsVerbose(registerModel, ops, 0)
-	if res != Ok {
-		t.Fatal("expected operations to be linearizable")
-	}
+	for _, tt := range registerModelVariants() {
+		t.Run(tt.name, func(t *testing.T) {
+			model := tt.model
 
-	// Verify metadata propagation to internal history
-	// We expect 3 operations * 2 entries (call+return) = 6 entries
-	if len(info.history) != 1 {
-		t.Fatalf("expected 1 partition, got %d", len(info.history))
-	}
-	entries := info.history[0]
-	if len(entries) != 6 {
-		t.Fatalf("expected 6 entries, got %d", len(entries))
-	}
+			ops := []Operation{
+				{ClientId: 0, Input: registerInput{false, 100}, Call: 0, Output: 0, Return: 100, Metadata: "meta1"},
+				{ClientId: 1, Input: registerInput{true, 0}, Call: 25, Output: 100, Return: 75, Metadata: "meta2"},
+				{ClientId: 2, Input: registerInput{true, 0}, Call: 30, Output: 0, Return: 60, Metadata: "meta3"},
+			}
+			res, info := CheckOperationsVerbose(model, ops, 0)
+			if res != Ok {
+				t.Fatal("expected operations to be linearizable")
+			}
 
-	// We can map IDs to metadata to verify.
-	expectedMeta := map[int]string{
-		0: "meta1",
-		1: "meta2",
-		2: "meta3",
-	}
+			// Verify metadata propagation to internal history
+			// We expect 3 operations * 2 entries (call+return) = 6 entries
+			if len(info.history) != 1 {
+				t.Fatalf("expected 1 partition, got %d", len(info.history))
+			}
+			entries := info.history[0]
+			if len(entries) != 6 {
+				t.Fatalf("expected 6 entries, got %d", len(entries))
+			}
 
-	for _, e := range entries {
-		if e.metadata == nil {
-			t.Errorf("entry %d (id %d) metadata is empty", e.time, e.id)
-			continue
-		}
-		if expectedMeta[e.id] != e.metadata {
-			t.Errorf("entry %d (id %d) expected metadata %s, got %s", e.time, e.id, expectedMeta[e.id], e.metadata)
-		}
+			// We can map IDs to metadata to verify.
+			expectedMeta := map[int]string{
+				0: "meta1",
+				1: "meta2",
+				2: "meta3",
+			}
+
+			for _, e := range entries {
+				if e.metadata == nil {
+					t.Errorf("entry %d (id %d) metadata is empty", e.time, e.id)
+					continue
+				}
+				if expectedMeta[e.id] != e.metadata {
+					t.Errorf("entry %d (id %d) expected metadata %s, got %s", e.time, e.id, expectedMeta[e.id], e.metadata)
+				}
+			}
+		})
 	}
 }

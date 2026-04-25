@@ -73,53 +73,59 @@ func TestVisualizationMultipleLengths(t *testing.T) {
 func TestRegisterModelReadme(t *testing.T) {
 	// basically the code from the README
 
-	events := []Event{
-		// C0: Write(100)
-		{Kind: CallEvent, Value: registerInput{false, 100}, Id: 0, ClientId: 0},
-		// C1: Read()
-		{Kind: CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1},
-		// C2: Read()
-		{Kind: CallEvent, Value: registerInput{true, 0}, Id: 2, ClientId: 2},
-		// C2: Completed Read -> 0
-		{Kind: ReturnEvent, Value: 0, Id: 2, ClientId: 2},
-		// C1: Completed Read -> 100
-		{Kind: ReturnEvent, Value: 100, Id: 1, ClientId: 1},
-		// C0: Completed Write
-		{Kind: ReturnEvent, Value: 0, Id: 0, ClientId: 0},
+	for _, tt := range registerModelVariants() {
+		t.Run(tt.name, func(t *testing.T) {
+			model := tt.model
+
+			events := []Event{
+				// C0: Write(100)
+				{Kind: CallEvent, Value: registerInput{false, 100}, Id: 0, ClientId: 0},
+				// C1: Read()
+				{Kind: CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1},
+				// C2: Read()
+				{Kind: CallEvent, Value: registerInput{true, 0}, Id: 2, ClientId: 2},
+				// C2: Completed Read -> 0
+				{Kind: ReturnEvent, Value: 0, Id: 2, ClientId: 2},
+				// C1: Completed Read -> 100
+				{Kind: ReturnEvent, Value: 100, Id: 1, ClientId: 1},
+				// C0: Completed Write
+				{Kind: ReturnEvent, Value: 0, Id: 0, ClientId: 0},
+			}
+
+			res, info := CheckEventsVerbose(model, events, 0)
+			// returns true
+
+			if res != Ok {
+				t.Fatal("expected operations to be linearizable")
+			}
+
+			visualizeTempFile(t, model, info)
+
+			events = []Event{
+				// C0: Write(200)
+				{Kind: CallEvent, Value: registerInput{false, 200}, Id: 0, ClientId: 0},
+				// C1: Read()
+				{Kind: CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1},
+				// C1: Completed Read -> 200
+				{Kind: ReturnEvent, Value: 200, Id: 1, ClientId: 1},
+				// C2: Read()
+				{Kind: CallEvent, Value: registerInput{true, 0}, Id: 2, ClientId: 2},
+				// C2: Completed Read -> 0
+				{Kind: ReturnEvent, Value: 0, Id: 2, ClientId: 2},
+				// C0: Completed Write
+				{Kind: ReturnEvent, Value: 0, Id: 0, ClientId: 0},
+			}
+
+			res, info = CheckEventsVerbose(model, events, 0)
+			// returns false
+
+			if res != Illegal {
+				t.Fatal("expected operations not to be linearizable")
+			}
+
+			visualizeTempFile(t, model, info)
+		})
 	}
-
-	res, info := CheckEventsVerbose(registerModel, events, 0)
-	// returns true
-
-	if res != Ok {
-		t.Fatal("expected operations to be linearizable")
-	}
-
-	visualizeTempFile(t, registerModel, info)
-
-	events = []Event{
-		// C0: Write(200)
-		{Kind: CallEvent, Value: registerInput{false, 200}, Id: 0, ClientId: 0},
-		// C1: Read()
-		{Kind: CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1},
-		// C1: Completed Read -> 200
-		{Kind: ReturnEvent, Value: 200, Id: 1, ClientId: 1},
-		// C2: Read()
-		{Kind: CallEvent, Value: registerInput{true, 0}, Id: 2, ClientId: 2},
-		// C2: Completed Read -> 0
-		{Kind: ReturnEvent, Value: 0, Id: 2, ClientId: 2},
-		// C0: Completed Write
-		{Kind: ReturnEvent, Value: 0, Id: 0, ClientId: 0},
-	}
-
-	res, info = CheckEventsVerbose(registerModel, events, 0)
-	// returns false
-
-	if res != Illegal {
-		t.Fatal("expected operations not to be linearizable")
-	}
-
-	visualizeTempFile(t, registerModel, info)
 }
 
 func TestVisualizationLarge(t *testing.T) {
@@ -490,111 +496,115 @@ func TestVisualizationMetadataAlwaysVisible(t *testing.T) {
 }
 
 func TestVisualizationEventMetadata(t *testing.T) {
-	model := registerModel
-	model.DescribeOperationMetadata = func(info interface{}) string {
-		if info == nil {
-			return ""
-		}
-		return fmt.Sprintf("event-meta: %v", info)
-	}
+	for _, tt := range registerModelVariants() {
+		t.Run(tt.name, func(t *testing.T) {
+			model := tt.model
+			model.DescribeOperationMetadata = func(info interface{}) string {
+				if info == nil {
+					return ""
+				}
+				return fmt.Sprintf("event-meta: %v", info)
+			}
 
-	events := []Event{
-		// C0: Write(100) with metadata on both CallEvent and ReturnEvent (Return should take precedence)
-		{Kind: CallEvent, Value: registerInput{false, 100}, Id: 0, ClientId: 0, Metadata: "write-call-meta-IGNORED"},
-		// C1: Read() with metadata only on CallEvent
-		{Kind: CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1, Metadata: "read-call-meta"},
-		// C2: Read() with metadata only on ReturnEvent
-		{Kind: CallEvent, Value: registerInput{true, 0}, Id: 2, ClientId: 2},
-		// C1: Completed Read -> 100 (no metadata on return, should use call metadata)
-		{Kind: ReturnEvent, Value: 100, Id: 1, ClientId: 1},
-		// C2: Completed Read -> 100 (metadata on ReturnEvent only)
-		{Kind: ReturnEvent, Value: 100, Id: 2, ClientId: 2, Metadata: "read-return-meta"},
-		// C0: Completed Write (metadata on ReturnEvent should take precedence over CallEvent)
-		{Kind: ReturnEvent, Value: 0, Id: 0, ClientId: 0, Metadata: "write-return-meta"},
-	}
+			events := []Event{
+				// C0: Write(100) with metadata on both CallEvent and ReturnEvent (Return should take precedence)
+				{Kind: CallEvent, Value: registerInput{false, 100}, Id: 0, ClientId: 0, Metadata: "write-call-meta-IGNORED"},
+				// C1: Read() with metadata only on CallEvent
+				{Kind: CallEvent, Value: registerInput{true, 0}, Id: 1, ClientId: 1, Metadata: "read-call-meta"},
+				// C2: Read() with metadata only on ReturnEvent
+				{Kind: CallEvent, Value: registerInput{true, 0}, Id: 2, ClientId: 2},
+				// C1: Completed Read -> 100 (no metadata on return, should use call metadata)
+				{Kind: ReturnEvent, Value: 100, Id: 1, ClientId: 1},
+				// C2: Completed Read -> 100 (metadata on ReturnEvent only)
+				{Kind: ReturnEvent, Value: 100, Id: 2, ClientId: 2, Metadata: "read-return-meta"},
+				// C0: Completed Write (metadata on ReturnEvent should take precedence over CallEvent)
+				{Kind: ReturnEvent, Value: 0, Id: 0, ClientId: 0, Metadata: "write-return-meta"},
+			}
 
-	res, info := CheckEventsVerbose(model, events, 0)
-	if res != Ok {
-		t.Fatal("expected operations to be linearizable")
-	}
+			res, info := CheckEventsVerbose(model, events, 0)
+			if res != Ok {
+				t.Fatal("expected operations to be linearizable")
+			}
 
-	// Part 1: Test data structure directly
-	data := computeVisualizationData(model, info)
+			// Part 1: Test data structure directly
+			data := computeVisualizationData(model, info)
 
-	if len(data.Partitions) != 1 {
-		t.Fatalf("expected 1 partition, got %d", len(data.Partitions))
-	}
-	history := data.Partitions[0].History
-	if len(history) != 3 {
-		t.Fatalf("expected 3 history elements, got %d", len(history))
-	}
+			if len(data.Partitions) != 1 {
+				t.Fatalf("expected 1 partition, got %d", len(data.Partitions))
+			}
+			history := data.Partitions[0].History
+			if len(history) != 3 {
+				t.Fatalf("expected 3 history elements, got %d", len(history))
+			}
 
-	// Verify metadata is associated with the correct operations
-	// history[0] = operation Id=0 (Write, ClientId=0)
-	if history[0].ClientId != 0 {
-		t.Errorf("expected history[0].ClientId=0, got %d", history[0].ClientId)
-	}
-	if history[0].Metadata != "event-meta: write-return-meta" {
-		t.Errorf("expected history[0].Metadata='event-meta: write-return-meta', got '%s'", history[0].Metadata)
-	}
+			// Verify metadata is associated with the correct operations
+			// history[0] = operation Id=0 (Write, ClientId=0)
+			if history[0].ClientId != 0 {
+				t.Errorf("expected history[0].ClientId=0, got %d", history[0].ClientId)
+			}
+			if history[0].Metadata != "event-meta: write-return-meta" {
+				t.Errorf("expected history[0].Metadata='event-meta: write-return-meta', got '%s'", history[0].Metadata)
+			}
 
-	// history[1] = operation Id=1 (Read, ClientId=1)
-	if history[1].ClientId != 1 {
-		t.Errorf("expected history[1].ClientId=1, got %d", history[1].ClientId)
-	}
-	if history[1].Metadata != "event-meta: read-call-meta" {
-		t.Errorf("expected history[1].Metadata='event-meta: read-call-meta', got '%s'", history[1].Metadata)
-	}
+			// history[1] = operation Id=1 (Read, ClientId=1)
+			if history[1].ClientId != 1 {
+				t.Errorf("expected history[1].ClientId=1, got %d", history[1].ClientId)
+			}
+			if history[1].Metadata != "event-meta: read-call-meta" {
+				t.Errorf("expected history[1].Metadata='event-meta: read-call-meta', got '%s'", history[1].Metadata)
+			}
 
-	// history[2] = operation Id=2 (Read, ClientId=2)
-	if history[2].ClientId != 2 {
-		t.Errorf("expected history[2].ClientId=2, got %d", history[2].ClientId)
-	}
-	if history[2].Metadata != "event-meta: read-return-meta" {
-		t.Errorf("expected history[2].Metadata='event-meta: read-return-meta', got '%s'", history[2].Metadata)
-	}
+			// history[2] = operation Id=2 (Read, ClientId=2)
+			if history[2].ClientId != 2 {
+				t.Errorf("expected history[2].ClientId=2, got %d", history[2].ClientId)
+			}
+			if history[2].Metadata != "event-meta: read-return-meta" {
+				t.Errorf("expected history[2].Metadata='event-meta: read-return-meta', got '%s'", history[2].Metadata)
+			}
 
-	// Part 2: Test HTML output (end-to-end verification)
-	file, err := os.CreateTemp("", "porcupine_test_event_metadata_*.html")
-	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
-	defer os.Remove(file.Name())
-	defer file.Close()
+			// Part 2: Test HTML output (end-to-end verification)
+			file, err := os.CreateTemp("", "porcupine_test_event_metadata_*.html")
+			if err != nil {
+				t.Fatalf("failed to create temp file: %v", err)
+			}
+			defer os.Remove(file.Name())
+			defer file.Close()
 
-	if err := Visualize(model, info, file); err != nil {
-		t.Fatalf("Visualize failed: %v", err)
-	}
+			if err := Visualize(model, info, file); err != nil {
+				t.Fatalf("Visualize failed: %v", err)
+			}
 
-	content, err := os.ReadFile(file.Name())
-	if err != nil {
-		t.Fatalf("failed to read generated HTML: %v", err)
-	}
+			content, err := os.ReadFile(file.Name())
+			if err != nil {
+				t.Fatalf("failed to read generated HTML: %v", err)
+			}
 
-	// Extract JSON from HTML: "const data = {...}"
-	re := regexp.MustCompile(`const data = (\{.*\})`)
-	matches := re.FindSubmatch(content)
-	if len(matches) < 2 {
-		t.Fatal("failed to extract JSON data from HTML")
-	}
+			// Extract JSON from HTML: "const data = {...}"
+			re := regexp.MustCompile(`const data = (\{.*\})`)
+			matches := re.FindSubmatch(content)
+			if len(matches) < 2 {
+				t.Fatal("failed to extract JSON data from HTML")
+			}
 
-	var htmlData visualizationData
-	if err := json.Unmarshal(matches[1], &htmlData); err != nil {
-		t.Fatalf("failed to unmarshal JSON from HTML: %v", err)
-	}
+			var htmlData visualizationData
+			if err := json.Unmarshal(matches[1], &htmlData); err != nil {
+				t.Fatalf("failed to unmarshal JSON from HTML: %v", err)
+			}
 
-	// Verify HTML contains correctly structured data
-	if len(htmlData.Partitions) != 1 || len(htmlData.Partitions[0].History) != 3 {
-		t.Fatalf("unexpected HTML data structure")
-	}
-	htmlHistory := htmlData.Partitions[0].History
-	if htmlHistory[0].Metadata != "event-meta: write-return-meta" {
-		t.Errorf("HTML: expected history[0].Metadata='event-meta: write-return-meta', got '%s'", htmlHistory[0].Metadata)
-	}
-	if htmlHistory[1].Metadata != "event-meta: read-call-meta" {
-		t.Errorf("HTML: expected history[1].Metadata='event-meta: read-call-meta', got '%s'", htmlHistory[1].Metadata)
-	}
-	if htmlHistory[2].Metadata != "event-meta: read-return-meta" {
-		t.Errorf("HTML: expected history[2].Metadata='event-meta: read-return-meta', got '%s'", htmlHistory[2].Metadata)
+			// Verify HTML contains correctly structured data
+			if len(htmlData.Partitions) != 1 || len(htmlData.Partitions[0].History) != 3 {
+				t.Fatalf("unexpected HTML data structure")
+			}
+			htmlHistory := htmlData.Partitions[0].History
+			if htmlHistory[0].Metadata != "event-meta: write-return-meta" {
+				t.Errorf("HTML: expected history[0].Metadata='event-meta: write-return-meta', got '%s'", htmlHistory[0].Metadata)
+			}
+			if htmlHistory[1].Metadata != "event-meta: read-call-meta" {
+				t.Errorf("HTML: expected history[1].Metadata='event-meta: read-call-meta', got '%s'", htmlHistory[1].Metadata)
+			}
+			if htmlHistory[2].Metadata != "event-meta: read-return-meta" {
+				t.Errorf("HTML: expected history[2].Metadata='event-meta: read-return-meta', got '%s'", htmlHistory[2].Metadata)
+			}
+		})
 	}
 }

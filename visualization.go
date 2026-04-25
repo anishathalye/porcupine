@@ -1,6 +1,7 @@
 package porcupine
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -184,7 +185,7 @@ func computeVisualizationData(model Model, info LinearizationInfo) visualization
 			state := model.Init()
 			for j, histId := range partial {
 				var ok bool
-				ok, state = model.Step(state, callValue[histId], returnValue[histId])
+				ok, state = modelStep(context.Background(), model, state, callValue[histId], returnValue[histId])
 				if !ok {
 					panic("valid partial linearization returned non-ok result from model step")
 				}
