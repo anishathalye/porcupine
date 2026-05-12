@@ -5,19 +5,19 @@ import (
 	"fmt"
 )
 
-// OrderKind represents the kind of precedence relationship between two operations
+// OrderKind represents the kind of an ordering constraint
 type OrderKind int
 
 const (
-	// Indicates that event a should be strictly ordered before event b.
+	// Indicates that operation a should be strictly ordered before operation b.
 	HardBefore OrderKind = -2
-	// Indicates that event a should likely be ordered before event b.
+	// Indicates that operation a should likely be ordered before operation b.
 	SoftBefore OrderKind = -1
 	// Indicates that there is no information about the relative order of operations a and b.
 	Unconstrained OrderKind = 0
-	// Indicates that event a should likely be ordered after event b.
+	// Indicates that operation a should likely be ordered after operation b.
 	SoftAfter OrderKind = 1
-	// Indicates that event a should be strictly ordered after event b.
+	// Indicates that operation a should be strictly ordered after operation b.
 	HardAfter OrderKind = 2
 )
 

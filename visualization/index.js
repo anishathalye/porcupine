@@ -400,6 +400,23 @@ function render(data) {
   let selected = false
   let selectedIndex = [-1, -1]
 
+  // Build per-partition lookup: clientOpsByPartition[p][clientId] = sorted list of historyElements
+  // Only for core (non-annotation) partitions
+  const clientOpsByPartition = coreHistory.map((partition) => {
+    const byClient = {}
+    for (const element of partition.History) {
+      if (!Object.hasOwn(byClient, element.ClientId)) {
+        byClient[element.ClientId] = []
+      }
+      byClient[element.ClientId].push(element)
+    }
+    // Sort each client's ops by Start time so index in array == op index
+    for (const clientId of Object.keys(byClient)) {
+      byClient[clientId].sort((a, b) => a.Start - b.Start)
+    }
+    return byClient
+  })
+
   const height = 2 * PADDING + BOX_HEIGHT * nClient + BOX_SPACE * (nClient - 1)
   const width = 2 * PADDING + maxTagWidth + xPos[sortedTimestamps.at(-1)]
   const svg = svgadd(document.querySelector('#canvas'), 'svg', {
@@ -622,6 +639,9 @@ function render(data) {
   // Attach targetRects
   svgattach(svg, targetRects)
 
+  // Dependency arrow overlay (drawn on top of everything)
+  const depArrowGroup = svgadd(svg, 'g', {class: 'dep-arrows'})
+
   // Tooltip
   // eslint-disable-next-line unicorn/prefer-dom-node-append
   const tooltip = document.querySelector('#canvas').appendChild(document.createElement('div'))
@@ -633,6 +653,70 @@ function render(data) {
       const index = Number.parseInt(this.dataset.index, 10)
       highlight(partition, index)
       tooltip.style.display = 'block'
+    }
+  }
+
+  // Draw dependency lines for the selected element.
+  // Uses the same geometry as invalid LP lines: a straight connecting line
+  // plus a vertical tick at each source operation (LP-point style).
+  function drawDepArrows(partition, index) {
+    // Clear existing
+    while (depArrowGroup.firstChild) {
+      depArrowGroup.removeChild(depArrowGroup.firstChild)
+    }
+
+    if (partition >= coreHistory.length) return
+
+    const element = coreHistory[partition].History[index]
+    if (!element.StartDeps) return
+
+    const clientOpsMap = clientOpsByPartition[partition]
+
+    // Target LP position — same formula as LP rendering
+    const targetX = t0x + xPos[element.Start]
+    const targetY = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
+
+    for (let c = 0; c < element.StartDeps.length; c++) {
+      if (c === element.ClientId) continue // skip self
+      const depIdx = element.StartDeps[c] - 1 // last op from client c that must precede this
+      if (depIdx < 0) continue // no dependency on this client
+      if (!Object.hasOwn(clientOpsMap, c)) continue
+      const srcOps = clientOpsMap[c]
+      if (depIdx >= srcOps.length) continue
+      const srcElem = srcOps[depIdx]
+
+      const srcX = t0x + xPos[srcElem.Start]
+      const srcY = PADDING + srcElem.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
+
+      // Connecting line (same y-edge logic as LP lines)
+      svgadd(depArrowGroup, 'line', {
+        x1: srcX,
+        x2: targetX,
+        y1:
+          srcElem.ClientId >= element.ClientId
+            ? srcY
+            : srcY + BOX_HEIGHT + 2 * LINE_BLEED,
+        y2:
+          srcElem.ClientId <= element.ClientId
+            ? targetY
+            : targetY + BOX_HEIGHT + 2 * LINE_BLEED,
+        class: 'dep-constraint dep-constraint-line',
+      })
+
+      // Vertical tick at source op
+      svgadd(depArrowGroup, 'line', {
+        x1: srcX,
+        x2: srcX,
+        y1: srcY,
+        y2: srcY + BOX_HEIGHT + 2 * LINE_BLEED,
+        class: 'dep-constraint dep-constraint-point',
+      })
+    }
+  }
+
+  function clearDepArrows() {
+    while (depArrowGroup.firstChild) {
+      depArrowGroup.removeChild(depArrowGroup.firstChild)
     }
   }
 
@@ -867,7 +951,7 @@ function render(data) {
 
   function handleBgClick() {
     deselect()
-
+    clearDepArrows()
     tooltip.style.display = 'none'
     lastTooltip = [null, null, null, null, null]
   }
@@ -877,6 +961,7 @@ function render(data) {
     selectedIndex = [partition, index]
     highlight(partition, index)
     historyRects[partition][index].classList.add('selected')
+    drawDepArrows(partition, index)
   }
 
   function deselect() {
@@ -888,6 +973,7 @@ function render(data) {
     resetHighlight()
     const [partition, index] = selectedIndex
     historyRects[partition][index].classList.remove('selected')
+    clearDepArrows()
   }
 
   handleMouseOut() // Initialize, same as mouse out
