@@ -17,6 +17,8 @@ type historyElement struct {
 	OriginalEnd   string
 	Description   string
 	Metadata      string
+	Id            int   // global operation id
+	StartDeps     []int // StartDeps[c] = index of first op in client c with no outgoing dep to this op
 }
 
 type annotation struct {
@@ -110,8 +112,11 @@ func timestampMapping(info LinearizationInfo) map[int64]int {
 	// find all timestamps
 	allTimestamps := make(map[int64]struct{})
 	for _, partition := range info.history {
-		for _, elem := range partition {
-			allTimestamps[elem.time] = struct{}{}
+		for _, cltOps := range partition {
+			for _, cltOp := range cltOps {
+				allTimestamps[cltOp.Op.Call] = struct{}{}
+				allTimestamps[cltOp.Op.Return] = struct{}{}
+			}
 		}
 	}
 	for _, elem := range info.annotations {
@@ -141,31 +146,29 @@ func computeVisualizationData(model Model, info LinearizationInfo) visualization
 	model = fillDefault(model)
 	partitions := make([]partitionVisualizationData, len(info.history))
 	for partition := 0; partition < len(info.history); partition++ {
-		// history
-		n := len(info.history[partition]) / 2
-		history := make([]historyElement, n)
+		// history: count total ops across all clients in this partition
+		numOps := 0
+		for _, cltOps := range info.history[partition] {
+			numOps += len(cltOps)
+		}
+		history := make([]historyElement, numOps)
 		callValue := make(map[int]interface{})
 		returnValue := make(map[int]interface{})
-		callMetadata := make(map[int]interface{})
-		for _, elem := range info.history[partition] {
-			switch elem.kind {
-			case callEntry:
-				history[elem.id].ClientId = elem.clientId
-				history[elem.id].Start = timeMap[elem.time]
-				history[elem.id].OriginalStart = fmt.Sprintf("%d", elem.time)
-				callValue[elem.id] = elem.value
-				callMetadata[elem.id] = elem.metadata
-			case returnEntry:
-				history[elem.id].End = timeMap[elem.time]
-				history[elem.id].OriginalEnd = fmt.Sprintf("%d", elem.time)
-				history[elem.id].Description = model.DescribeOperation(callValue[elem.id], elem.value)
-				returnValue[elem.id] = elem.value
-				// prefer return metadata over call metadata
-				metadata := callMetadata[elem.id]
-				if elem.metadata != nil {
-					metadata = elem.metadata
-				}
-				history[elem.id].Metadata = model.DescribeOperationMetadata(metadata)
+		for _, cltOps := range info.history[partition] {
+			for _, cltOp := range cltOps {
+				op := cltOp.Op
+				id := cltOp.Id
+				history[id].ClientId = op.ClientId
+				history[id].Start = timeMap[op.Call]
+				history[id].OriginalStart = fmt.Sprintf("%d", op.Call)
+				history[id].End = timeMap[op.Return]
+				history[id].OriginalEnd = fmt.Sprintf("%d", op.Return)
+				history[id].Description = model.DescribeOperation(op.Input, op.Output)
+				history[id].Metadata = model.DescribeOperationMetadata(op.Metadata)
+				history[id].Id = cltOp.Id
+				history[id].StartDeps = cltOp.Start
+				callValue[id] = op.Input
+				returnValue[id] = op.Output
 			}
 			// historyElement.Annotation defaults to false, so we
 			// don't need to explicitly set it here; all of these

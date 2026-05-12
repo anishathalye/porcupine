@@ -9,13 +9,14 @@ type OperationHistory [][]ClientOperation
 type ClientOperation struct {
 	Op      Operation
 	Id      int                    // global operation id
-	Start   []int                  // start[c] is the index of the first operation from client c that has no outgoing dependency to this op
-	Visited bool                   // whether the start of this op has been computed
+	id      int                    // alias kept for internal use
+	Start   []int                  // Start[c] is the index of the first operation from client c that has no outgoing dependency to this op
+	visited bool                   // whether the Start of this op has been computed
 	Params  map[string]interface{} // parameters set by oracle preprocessors
 }
 
 func newclientOperation(op Operation, numClients int, id int) ClientOperation {
-	return ClientOperation{Op: op, Start: nil, Visited: false, Id: id}
+	return ClientOperation{Op: op, Id: id, id: id, Start: nil, visited: false}
 }
 
 type client struct {
@@ -26,7 +27,7 @@ type client struct {
 }
 
 func (ch *chains) computeStart(c int, consistency Consistency) {
-	if ch.clients[c].head >= len(ch.clients[c].cltOps) || ch.clients[c].cltOps[ch.clients[c].head].Visited {
+	if ch.clients[c].head >= len(ch.clients[c].cltOps) || ch.clients[c].cltOps[ch.clients[c].head].visited {
 		return
 	}
 	op := &ch.clients[c].cltOps[ch.clients[c].head]
@@ -76,7 +77,7 @@ func (ch *chains) computeStart(c int, consistency Consistency) {
 		}
 		op.Start[d] = low
 	}
-	op.Visited = true
+	op.visited = true
 }
 
 type chains struct {
@@ -144,7 +145,7 @@ func newChains(history OperationHistory, consistency Consistency) chains {
 	starts := make([]int, n*numClients)
 	for i := 0; i < numClients; i++ {
 		for j := 0; j < len(clients[i].cltOps); j++ {
-			clients[i].cltOps[j].Start = starts[clients[i].cltOps[j].Id*numClients : (clients[i].cltOps[j].Id+1)*numClients]
+			clients[i].cltOps[j].Start = starts[clients[i].cltOps[j].id*numClients : (clients[i].cltOps[j].id+1)*numClients]
 		}
 	}
 
@@ -190,13 +191,13 @@ func (c *client) lift(model Model, consistency Consistency, oldState interface{}
 	}
 
 	// check cache
-	serialized.set(uint(cltOp.Id))
+	serialized.set(uint(cltOp.id))
 	hash := serialized.hash()
 
 	if entries, ok := cache[hash]; ok {
 		for _, elem := range entries {
 			if serialized.equals(elem.linearized) && model.Equal(newState, elem.state) {
-				serialized.clear(uint(cltOp.Id))
+				serialized.clear(uint(cltOp.id))
 				return oldState, false
 			}
 		}
@@ -204,7 +205,7 @@ func (c *client) lift(model Model, consistency Consistency, oldState interface{}
 
 	cache[hash] = append(cache[hash], cacheEntry{serialized.clone(), newState})
 	e := stackEntry{
-		opId:     cltOp.Id,
+		opId:     cltOp.id,
 		clientId: c.id,
 		state:    oldState,
 		opIdx:    c.head,

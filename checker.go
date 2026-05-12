@@ -27,8 +27,8 @@ type entry struct {
 type entries []entry
 
 type LinearizationInfo struct {
-	history               []entries // for each partition, a list of entries
-	partialLinearizations [][][]int // for each partition, a set of histories (list of ids)
+	history               []OperationHistory // for each partition, a list of client operations
+	partialLinearizations [][][]int          // for each partition, a set of histories (list of ids)
 	annotations           []Annotation
 }
 
@@ -52,39 +52,12 @@ func (li *LinearizationInfo) PartialLinearizations() [][][]int {
 // linearizable, it contains the maximal partial linearizations found.
 func (li *LinearizationInfo) PartialLinearizationsOperations() [][][]Operation {
 	result := make([][][]Operation, len(li.history))
-	for p, partition := range li.history {
-		// reconstruct operations based on entries
-		callMap := make(map[int]entry)
-		retMap := make(map[int]entry)
-		for _, e := range partition {
-			if e.kind == callEntry {
-				callMap[e.id] = e
-			} else {
-				retMap[e.id] = e
-			}
-		}
-
+	for p, clientOps := range li.history {
+		// build a map from global operation id to Operation
 		opMap := make(map[int]Operation)
-		for id, call := range callMap {
-			ret, ok := retMap[id]
-			if !ok {
-				// this should never happen, because the LinearizationInfo
-				// object should always contain valid partial linearizations,
-				// where there is a return for every call
-				panic("cannot find corresponding return for call")
-			}
-			// prefer return metadata over call metadata
-			metadata := call.metadata
-			if ret.metadata != nil {
-				metadata = ret.metadata
-			}
-			opMap[id] = Operation{
-				ClientId: call.clientId,
-				Input:    call.value,
-				Call:     call.time,
-				Output:   ret.value,
-				Return:   ret.time,
-				Metadata: metadata,
+		for _, cltOps := range clientOps {
+			for _, cltOp := range cltOps {
+				opMap[cltOp.Id] = cltOp.Op
 			}
 		}
 
@@ -434,7 +407,7 @@ loop:
 			}
 			partialLinearizations[i] = partials
 		}
-		info.history = entries
+		info.history = history
 		info.partialLinearizations = partialLinearizations
 	}
 	var result CheckResult

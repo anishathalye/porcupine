@@ -1,7 +1,7 @@
 package porcupine
 
 import (
-	"errors" 
+	"errors"
 	"strconv"
 )
 
@@ -50,12 +50,12 @@ func (c *Consistency) Check(a *ClientOperation, b *ClientOperation) (OrderKind, 
 		switch order {
 		case HardAfter:
 			if ok == HardBefore {
-				return ok, errors.New("conflicting order constraints" + " " + strconv.Itoa(a.Id) + " vs " + strconv.Itoa(b.Id))
+				return ok, errors.New("conflicting order constraints" + " " + strconv.Itoa(a.id) + " vs " + strconv.Itoa(b.id))
 			}
 			ok = HardAfter
 		case HardBefore:
 			if ok == HardAfter {
-				return ok, errors.New("conflicting order constraints" + " " + strconv.Itoa(a.Id) + " vs " + strconv.Itoa(b.Id))
+				return ok, errors.New("conflicting order constraints" + " " + strconv.Itoa(a.id) + " vs " + strconv.Itoa(b.id))
 			}
 			ok = HardBefore
 		case SoftAfter:
