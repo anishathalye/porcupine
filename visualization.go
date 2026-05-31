@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 )
 
 type historyElement struct {
@@ -254,6 +255,17 @@ func Visualize(model Model, info LinearizationInfo, output io.Writer) error {
 	if err != nil {
 		return err
 	}
+
+	if f, ok := output.(*os.File); ok {
+		name := f.Name()
+		if name != "" && name != os.Stdout.Name() && name != os.Stderr.Name() {
+			dagPath := strings.TrimSuffix(name, ".html") + "_dag.html"
+			if f2, err := os.Create(dagPath); err == nil {
+				defer f2.Close()
+				VisualizeDAG(data, f2)
+			}
+		}
+	}
 	return nil
 }
 
@@ -270,3 +282,238 @@ func VisualizePath(model Model, info LinearizationInfo, path string) error {
 
 //go:embed visualization
 var visualizationFS embed.FS
+
+type dagNode struct {
+	Id       int
+	ClientId int
+	Index    int
+	Desc     string
+	Start    string
+	End      string
+	Level    int
+}
+
+type dagEdge struct {
+	From int
+	To   int
+	Type string
+}
+
+func VisualizeDAG(data visualizationData, output io.Writer) error {
+	if len(data.Partitions) == 0 {
+		return nil
+	}
+	history := data.Partitions[0].History
+
+	clientOps := make(map[int][]historyElement)
+	for _, op := range history {
+		if len(clientOps[op.ClientId]) < 200 {
+			clientOps[op.ClientId] = append(clientOps[op.ClientId], op)
+		}
+	}
+
+	nodes := make(map[int]*dagNode)
+	nodeByIndex := make(map[int]map[int]*dagNode)
+
+	for cid, ops := range clientOps {
+		nodeByIndex[cid] = make(map[int]*dagNode)
+		for i, op := range ops {
+			start := op.OriginalStart
+			if start == "" {
+				start = fmt.Sprintf("%v", op.Start)
+			}
+			end := op.OriginalEnd
+			if end == "" {
+				end = fmt.Sprintf("%v", op.End)
+			}
+			n := &dagNode{
+				Id:       op.Id,
+				ClientId: op.ClientId,
+				Index:    i,
+				Desc:     op.Description,
+				Start:    start,
+				End:      end,
+			}
+			nodes[op.Id] = n
+			nodeByIndex[cid][i] = n
+		}
+	}
+
+	var edges []dagEdge
+	adj := make(map[int][]int)
+	inDegree := make(map[int]int)
+	for id := range nodes {
+		inDegree[id] = 0
+	}
+
+	for cid, ops := range clientOps {
+		for i, op := range ops {
+			opId := op.Id
+			if i > 0 {
+				prevOp := nodeByIndex[cid][i-1]
+				edges = append(edges, dagEdge{From: prevOp.Id, To: opId, Type: "intra"})
+				adj[prevOp.Id] = append(adj[prevOp.Id], opId)
+				inDegree[opId]++
+			}
+			for depCid, count := range op.StartDeps {
+				if count > 0 {
+					depIndex := count - 1
+					if depNode, ok := nodeByIndex[depCid][depIndex]; ok {
+						if depNode.Id != opId {
+							edges = append(edges, dagEdge{From: depNode.Id, To: opId, Type: "inter"})
+							adj[depNode.Id] = append(adj[depNode.Id], opId)
+							inDegree[opId]++
+						}
+					}
+				}
+			}
+		}
+	}
+
+	var queue []int
+	for id, deg := range inDegree {
+		if deg == 0 {
+			queue = append(queue, id)
+		}
+	}
+
+	var topo []int
+	levels := make(map[int]int)
+
+	for len(queue) > 0 {
+		u := queue[0]
+		queue = queue[1:]
+		topo = append(topo, u)
+		for _, v := range adj[u] {
+			if levels[u]+1 > levels[v] {
+				levels[v] = levels[u] + 1
+			}
+			inDegree[v]--
+			if inDegree[v] == 0 {
+				queue = append(queue, v)
+			}
+		}
+	}
+
+	if len(topo) != len(nodes) {
+		return fmt.Errorf("cycle found, cannot generate DAG")
+	}
+
+	for id, level := range levels {
+		nodes[id].Level = level
+	}
+
+	redundant := make(map[int]map[int]bool)
+	for id := range nodes {
+		redundant[id] = make(map[int]bool)
+	}
+
+	for u := range nodes {
+		for _, v := range adj[u] {
+			visited := make(map[int]bool)
+			var q []int
+			q = append(q, v)
+			visited[v] = true
+			for len(q) > 0 {
+				curr := q[0]
+				q = q[1:]
+				for _, next := range adj[curr] {
+					if !visited[next] {
+						visited[next] = true
+						q = append(q, next)
+					}
+				}
+			}
+			for w := range visited {
+				if w != v {
+					redundant[u][w] = true
+				}
+			}
+		}
+	}
+
+	type HtmlNode struct {
+		Id    int    `json:"id"`
+		Label string `json:"label"`
+		Group int    `json:"group"`
+		X     int    `json:"x"`
+		Y     int    `json:"y"`
+	}
+
+	type HtmlEdge struct {
+		From   int         `json:"from"`
+		To     int         `json:"to"`
+		Arrows string      `json:"arrows"`
+		Color  interface{} `json:"color,omitempty"`
+		Width  int         `json:"width,omitempty"`
+	}
+
+	var htmlNodes []HtmlNode
+	var htmlEdges []HtmlEdge
+	const X_SPACING = 200
+	const Y_SPACING = 150
+
+	for _, n := range nodes {
+		label := strings.ReplaceAll(n.Desc, " ", "\n")
+		htmlNodes = append(htmlNodes, HtmlNode{
+			Id:    n.Id,
+			Label: label,
+			Group: n.ClientId,
+			X:     n.ClientId * X_SPACING,
+			Y:     n.Level * Y_SPACING,
+		})
+	}
+
+	for _, e := range edges {
+		if e.Type == "intra" {
+			htmlEdges = append(htmlEdges, HtmlEdge{
+				From:   e.From,
+				To:     e.To,
+				Arrows: "to",
+			})
+		} else if e.Type == "inter" {
+			if !redundant[e.From][e.To] {
+				htmlEdges = append(htmlEdges, HtmlEdge{
+					From:   e.From,
+					To:     e.To,
+					Arrows: "to",
+				})
+			}
+		}
+	}
+
+	var longestSerialization []linearizationStep
+	if len(data.Partitions) > 0 {
+		for _, lin := range data.Partitions[0].PartialLinearizations {
+			if len(lin) > len(longestSerialization) {
+				longestSerialization = lin
+			}
+		}
+	}
+
+	for i := 0; i < len(longestSerialization)-1; i++ {
+		fromId := longestSerialization[i].Index
+		toId := longestSerialization[i+1].Index
+		htmlEdges = append(htmlEdges, HtmlEdge{
+			From:   fromId,
+			To:     toId,
+			Arrows: "to",
+			Color:  map[string]interface{}{"color": "black", "inherit": false},
+			Width:  3,
+		})
+	}
+
+	nodesJson, _ := json.Marshal(htmlNodes)
+	edgesJson, _ := json.Marshal(htmlEdges)
+
+	templateB, err := visualizationFS.ReadFile("visualization/dag.html")
+	if err != nil {
+		return err
+	}
+	htmlTemplate := string(templateB)
+
+	htmlContent := strings.Replace(htmlTemplate, "%s", string(nodesJson), 1)
+	htmlContent = strings.Replace(htmlContent, "%s", string(edgesJson), 1)
+	_, err = fmt.Fprint(output, htmlContent)
+	return err
+}

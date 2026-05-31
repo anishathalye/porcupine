@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Pine</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style type="text/css">
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: sans-serif;
+        }
+
+        #search-container {
+            padding: 10px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #search-input {
+            width: 300px;
+            padding: 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 8px 16px;
+            background: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0b5ed7;
+        }
+
+        #mynetwork {
+            width: 100%;
+            height: calc(100vh - 60px);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="search-container">
+        <input type="text" id="search-input" placeholder="Search operation description">
+        <button onclick="searchNode()">Search</button>
+        <button onclick="resetSearch()">Reset</button>
+    </div>
+    <div id="mynetwork"></div>
+
+    <script type="text/javascript">
+        var nodesData = %s;
+        var edgesData = %s;
+
+        var nodes = new vis.DataSet(nodesData);
+        var edges = new vis.DataSet(edgesData);
+
+        var container = document.getElementById('mynetwork');
+        var data = { nodes: nodes, edges: edges };
+        var options = {
+            physics: false,
+            nodes: { shape: 'box', font: { size: 14, face: 'sans-serif' } },
+            edges: { smooth: { type: 'cubicBezier', forceDirection: 'vertical', roundness: 0.4 }, color: { inherit: 'to' } },
+            interaction: { hover: true, tooltipDelay: 200, dragNodes: false }
+        };
+        var network = new vis.Network(container, data, options);
+
+        function searchNode() {
+            var searchText = document.getElementById('search-input').value.toLowerCase();
+            if (!searchText) return;
+
+            var matched = [];
+            nodes.forEach(function (n) {
+                if ((n.label && n.label.toLowerCase().includes(searchText)) ||
+                    (n.title && n.title.toLowerCase().includes(searchText))) {
+                    matched.push(n.id);
+                }
+            });
+
+            if (matched.length > 0) {
+                network.selectNodes(matched);
+                network.focus(matched[0], { scale: 1.2, animation: true });
+            } else {
+                alert("No operations found matching your search.");
+            }
+        }
+
+        function resetSearch() {
+            document.getElementById('search-input').value = "";
+            network.unselectAll();
+            network.fit({ animation: true });
+        }
+
+        document.getElementById("search-input").addEventListener("keypress", function (event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                searchNode();
+            }
+        });
+    </script>
+</body>
+
+</html>
