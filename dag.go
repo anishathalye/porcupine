@@ -1,6 +1,7 @@
 package porcupine
 
 import (
+	"fmt"
 	"sync/atomic"
 )
 
@@ -308,9 +309,13 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 	// The index of the first client to try to lift from the frontier
 	liftFrom := len(ch.frontier) - 1
 
+	// Counter for ch.unlift() calls
+	pops := 0
+
 	// while all operations are not serialized, explore permutations
 	for !ch.isComplete() {
 		if atomic.LoadInt32(kill) != 0 {
+			fmt.Printf("Total_pop: %d\n", pops)
 			return false, longest
 		}
 		// try serializing an operation from frontier
@@ -321,6 +326,7 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 		} else {
 			if len(stack) == 0 {
 				// no possible serialization
+				fmt.Printf("Total_pop: %d\n", pops)
 				return false, longest
 			}
 			if computePartial {
@@ -340,6 +346,7 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 				}
 			}
 			top, unlifted_id := ch.unlift(&stack, &serialized, consistency)
+			pops++ // increment pop counter
 			state = top
 			liftFrom = unlifted_id - 1
 		}
@@ -352,5 +359,6 @@ func checkSingle(model Model, consistency Consistency, history OperationHistory,
 	for i := 0; i < ch.numOps; i++ {
 		longest[i] = &seq
 	}
+	fmt.Printf("Total_pop: %d\n", pops)
 	return true, longest
 }
