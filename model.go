@@ -1,6 +1,7 @@
 package porcupine
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -81,8 +82,8 @@ type Event struct {
 // the model Step function should not modify the given state (or input or
 // output), but return a new state.
 //
-// Only the Init, Step, and Equal functions are necessary to specify if you
-// just want to test histories for linearizability.
+// Only the Init, Step (or StepContext), and Equal functions are necessary to
+// specify if you just want to test histories for linearizability.
 //
 // Implementing the partition functions can greatly improve performance. If
 // you're implementing the partition function, the model Init and Step
@@ -110,6 +111,10 @@ type Model struct {
 	// returns the new state. This function must be a pure function: it
 	// cannot mutate the given state.
 	Step func(state interface{}, input interface{}, output interface{}) (bool, interface{})
+	// StepContext is an optional context-aware Step function. If set, the
+	// checker and visualization replay call StepContext instead of Step,
+	// allowing the model to stop work promptly when a timeout expires.
+	StepContext func(ctx context.Context, state interface{}, input interface{}, output interface{}) (bool, interface{})
 	// Equality on states. If left nil, this package will use == as a
 	// fallback ([ShallowEqual]).
 	Equal func(state1, state2 interface{}) bool
@@ -152,6 +157,10 @@ type NondeterministicModel struct {
 	// the given state/input to produce the given output, this function
 	// should return an empty slice.
 	Step func(state interface{}, input interface{}, output interface{}) []interface{}
+	// StepContext is an optional context-aware Step function. If set, the
+	// checker calls StepContext instead of Step, allowing the model to stop
+	// work promptly when a timeout expires.
+	StepContext func(ctx context.Context, state interface{}, input interface{}, output interface{}) []interface{}
 	// Equality on states. If left nil, this package will use == as a
 	// fallback ([ShallowEqual]).
 	Equal func(state1, state2 interface{}) bool
@@ -212,22 +221,44 @@ func (nm *NondeterministicModel) ToModel() Model {
 	if describeOperationMetadata == nil {
 		describeOperationMetadata = defaultDescribeOperationMetadata
 	}
+	var nondeterministicStepContext func(ctx context.Context, state interface{}, input interface{}, output interface{}) []interface{}
+	switch {
+	case nm.StepContext != nil:
+		nondeterministicStepContext = nm.StepContext
+	case nm.Step != nil:
+		nondeterministicStepContext = func(ctx context.Context, state interface{}, input interface{}, output interface{}) []interface{} {
+			return nm.Step(state, input, output)
+		}
+	default:
+		panic("nondeterministic model must define Step or StepContext")
+	}
+	step := func(ctx context.Context, state, input, output interface{}) (bool, interface{}) {
+		states := state.([]interface{})
+		var allNextStates []interface{}
+		for _, state := range states {
+			if ctx.Err() != nil {
+				return false, nil
+			}
+			allNextStates = append(allNextStates, nondeterministicStepContext(ctx, state, input, output)...)
+		}
+		if ctx.Err() != nil {
+			return false, nil
+		}
+		uniqueNextStates := merge(allNextStates, equal)
+		return len(uniqueNextStates) > 0, uniqueNextStates
+	}
+	backgroundContext := context.Background()
 	return Model{
 		Partition:      nm.Partition,
 		PartitionEvent: nm.PartitionEvent,
 		// we need this wrapper to convert a []interface{} to an interface{}
 		Init: func() interface{} {
-			return merge(nm.Init(), nm.Equal)
+			return merge(nm.Init(), equal)
 		},
 		Step: func(state, input, output interface{}) (bool, interface{}) {
-			states := state.([]interface{})
-			var allNextStates []interface{}
-			for _, state := range states {
-				allNextStates = append(allNextStates, nm.Step(state, input, output)...)
-			}
-			uniqueNextStates := merge(allNextStates, equal)
-			return len(uniqueNextStates) > 0, uniqueNextStates
+			return step(backgroundContext, state, input, output)
 		},
+		StepContext: step,
 		// this operates on sets of states that have been merged, so we
 		// don't need to check inclusion in both directions
 		Equal: func(state1, state2 interface{}) bool {
