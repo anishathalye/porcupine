@@ -9,8 +9,8 @@
         html {
             margin: 0;
             padding: 0;
-            width: 100%;
-            height: 100%;
+            width: 100%%;
+            height: 100%%;
             font-family: sans-serif;
         }
 
@@ -44,7 +44,7 @@
         }
 
         #mynetwork {
-            width: 100%;
+            width: 100%%;
             height: calc(100vh - 60px);
         }
     </style>
@@ -53,8 +53,10 @@
 <body>
     <div id="search-container">
         <input type="text" id="search-input" placeholder="Search operation description">
-        <button onclick="searchNode()">Search</button>
+        <button onclick="searchNode(false)">Search</button>
+        <button onclick="searchNode(true)">Next</button>
         <button onclick="resetSearch()">Reset</button>
+        <span id="search-status" style="margin-left: 10px; color: #6c757d; font-size: 14px;"></span>
     </div>
     <div id="mynetwork"></div>
 
@@ -75,28 +77,49 @@
         };
         var network = new vis.Network(container, data, options);
 
-        function searchNode() {
+        var currentSearchText = "";
+        var currentMatched = [];
+        var currentSearchIndex = 0;
+
+        function searchNode(isNext) {
             var searchText = document.getElementById('search-input').value.toLowerCase();
             if (!searchText) return;
+            
+            var statusSpan = document.getElementById('search-status');
 
-            var matched = [];
-            nodes.forEach(function (n) {
-                if ((n.label && n.label.toLowerCase().includes(searchText)) ||
-                    (n.title && n.title.toLowerCase().includes(searchText))) {
-                    matched.push(n.id);
-                }
-            });
-
-            if (matched.length > 0) {
-                network.selectNodes(matched);
-                network.focus(matched[0], { scale: 1.2, animation: true });
+            if (!isNext || searchText !== currentSearchText) {
+                currentSearchText = searchText;
+                currentSearchIndex = 0;
+                currentMatched = [];
+                nodes.forEach(function (n) {
+                    var searchLabel = n.label ? n.label.replace(/\n/g, " ").toLowerCase() : "";
+                    var searchTitle = n.title ? n.title.toLowerCase() : "";
+                    if (searchLabel.includes(searchText) || searchTitle.includes(searchText)) {
+                        currentMatched.push(n.id);
+                    }
+                });
             } else {
+                if (currentMatched.length > 0) {
+                    currentSearchIndex = (currentSearchIndex + 1) %% currentMatched.length;
+                }
+            }
+
+            if (currentMatched.length > 0) {
+                network.selectNodes(currentMatched);
+                network.focus(currentMatched[currentSearchIndex], { scale: 1.2, animation: true });
+                statusSpan.textContent = "Showing " + (currentSearchIndex + 1) + " of " + currentMatched.length + " matches";
+            } else {
+                statusSpan.textContent = "";
                 alert("No operations found matching your search.");
             }
         }
 
         function resetSearch() {
             document.getElementById('search-input').value = "";
+            document.getElementById('search-status').textContent = "";
+            currentSearchText = "";
+            currentMatched = [];
+            currentSearchIndex = 0;
             network.unselectAll();
             network.fit({ animation: true });
         }
@@ -104,7 +127,7 @@
         document.getElementById("search-input").addEventListener("keypress", function (event) {
             if (event.key === "Enter") {
                 event.preventDefault();
-                searchNode();
+                searchNode(false);
             }
         });
     </script>
