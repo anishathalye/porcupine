@@ -435,19 +435,23 @@ func checkEvents(model Model, consistency Consistency, history []Event, verbose 
 		clientOperations := make(map[int][]ClientOperation)
 		maxClientId := 0
 		for j, ev := range l[i] {
-			if ev.kind == false {
+			if ev.kind == false { // call
 				op := Operation{
 					ClientId: ev.clientId,
 					OpKind:   ev.opKind,
 					Input:    ev.value,
 					Call:     int64(j),
+					Metadata: ev.metadata,
 				}
 				clientOperations[ev.clientId] = append(clientOperations[ev.clientId], newclientOperation(op, numClients, ev.id))
-			} else {
+			} else { //return
 				call := clientOperations[ev.clientId][len(clientOperations[ev.clientId])-1]
 				call.Op.Output = ev.value
 				call.Op.Return = int64(j)
 				call.Op.OrderHint = ev.hint
+				if ev.metadata != nil {
+					call.Op.Metadata = ev.metadata
+				}
 				clientOperations[ev.clientId][len(clientOperations[ev.clientId])-1] = call
 			}
 			if ev.clientId > maxClientId {

@@ -1,7 +1,7 @@
 package porcupine
 
 import (
-	"errors" 
+	"errors"
 	"fmt"
 )
 
@@ -21,6 +21,7 @@ const (
 	HardAfter OrderKind = 2
 )
 
+// Oracle encodes ordering constraints by comparing pairs of operations.
 type Oracle struct {
 	// Preprocess adds additional info to clientOperations before comparison.
 	Preprocess func(op *ClientOperation, state interface{}) interface{}
@@ -28,11 +29,13 @@ type Oracle struct {
 	Compare func(a *ClientOperation, b *ClientOperation) (OrderKind, error)
 }
 
+// Validity defines valid serializations for a model.
 type Validity struct {
 	Init func(model Model) interface{}
 	Step func(state interface{}, input interface{}, output interface{}, model Model) (bool, interface{})
 }
 
+// Consistency encodes a consistency property.
 type Consistency struct {
 	// e.g., linearizability; etcd revision number, etc
 	Oracles []Oracle
@@ -50,12 +53,12 @@ func (c *Consistency) Check(a *ClientOperation, b *ClientOperation) (OrderKind, 
 		switch order {
 		case HardAfter:
 			if ok == HardBefore {
-				return ok, errors.New("conflicting order constraints:\n" + fmt.Sprintf("%+v", a) + "\n" + fmt.Sprintf("%+v", b)) 
+				return ok, errors.New("conflicting order constraints:\n" + fmt.Sprintf("%+v", a) + "\n" + fmt.Sprintf("%+v", b))
 			}
 			ok = HardAfter
 		case HardBefore:
 			if ok == HardAfter {
-				return ok, errors.New("conflicting order constraints:\n" + fmt.Sprintf("%+v", a) + "\n" + fmt.Sprintf("%+v", b)) 
+				return ok, errors.New("conflicting order constraints:\n" + fmt.Sprintf("%+v", a) + "\n" + fmt.Sprintf("%+v", b))
 			}
 			ok = HardBefore
 		case SoftAfter:

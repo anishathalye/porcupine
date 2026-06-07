@@ -1721,9 +1721,9 @@ func TestRegisterModelMetadata(t *testing.T) {
 	if len(info.history) != 1 {
 		t.Fatalf("expected 1 partition, got %d", len(info.history))
 	}
-	entries := info.history[0]
-	if len(entries) != 6 {
-		t.Fatalf("expected 6 entries, got %d", len(entries))
+	operations := info.history[0]
+	if len(operations) != 3 {
+		t.Fatalf("expected 3 operations, got %d", len(operations))
 	}
 
 	// We can map IDs to metadata to verify.
@@ -1733,13 +1733,15 @@ func TestRegisterModelMetadata(t *testing.T) {
 		2: "meta3",
 	}
 
-	for _, e := range entries {
-		if e.metadata == nil {
-			t.Errorf("entry %d (id %d) metadata is empty", e.time, e.id)
-			continue
-		}
-		if expectedMeta[e.id] != e.metadata {
-			t.Errorf("entry %d (id %d) expected metadata %s, got %s", e.time, e.id, expectedMeta[e.id], e.metadata)
+	for _, client := range operations {
+		for _, op := range client {
+			if op.Op.Metadata == nil {
+				t.Errorf("operation %d metadata is empty", op.id)
+				continue
+			}
+			if expectedMeta[op.id] != op.Op.Metadata {
+				t.Errorf("operation %d expected metadata %s, got %s", op.id, expectedMeta[op.id], op.Op.Metadata)
+			}
 		}
 	}
 }

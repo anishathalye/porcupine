@@ -18,8 +18,8 @@ type historyElement struct {
 	OriginalEnd   string
 	Description   string
 	Metadata      string
-	Id            int   // global operation id
-	StartDeps     []int // StartDeps[c] = index of first op in client c with no outgoing dep to this op
+	Id            int
+	StartDeps     []int
 }
 
 type annotation struct {
