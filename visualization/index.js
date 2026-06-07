@@ -98,7 +98,7 @@ function render(data) {
 
   // Add synthetic client numbers
   const tag2ClientId = {}
-  const sortedTags = [...tags].sort()
+  const sortedTags = [...tags].toSorted()
   for (const tag of sortedTags) {
     maxClient += 1
     tag2ClientId[tag] = maxClient
@@ -137,7 +137,7 @@ function render(data) {
     }
   }
 
-  let sortedTimestamps = [...allTimestamps].sort((a, b) => a - b)
+  let sortedTimestamps = [...allTimestamps].toSorted((a, b) => a - b)
 
   // If one event has the same end time as another's start time, that means that
   // they are concurrent, and we need to display them with overlap. We do this
@@ -208,7 +208,7 @@ function render(data) {
   }
 
   // Update sortedTimestamps, because we created some new timestamps.
-  sortedTimestamps = [...allTimestamps].sort((a, b) => a - b)
+  sortedTimestamps = [...allTimestamps].toSorted((a, b) => a - b)
 
   // Compute layout.
   //
@@ -269,7 +269,7 @@ function render(data) {
         }
       })
     )
-    .sort((a, b) => a.end - b.end)
+    .toSorted((a, b) => a.end - b.end)
   // Some preprocessing for linearization points and illegal next
   // linearizations. We need to figure out where exactly LPs end up
   // as we go, so we can make sure event boxes are wide enough.
@@ -408,12 +408,15 @@ function render(data) {
       if (!Object.hasOwn(byClient, element.ClientId)) {
         byClient[element.ClientId] = []
       }
+
       byClient[element.ClientId].push(element)
     }
+
     // Sort each client's ops by Start time so index in array == op index
     for (const clientId of Object.keys(byClient)) {
       byClient[clientId].sort((a, b) => a.Start - b.Start)
     }
+
     return byClient
   })
 
@@ -662,7 +665,7 @@ function render(data) {
   function drawDepArrows(partition, index) {
     // Clear existing
     while (depArrowGroup.firstChild) {
-      depArrowGroup.removeChild(depArrowGroup.firstChild)
+      depArrowGroup.firstChild.remove()
     }
 
     if (partition >= coreHistory.length) return
@@ -677,23 +680,24 @@ function render(data) {
     const targetY = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
 
     for (let c = 0; c < element.StartDeps.length; c++) {
-      if (c === element.ClientId) continue // skip self
-      const depIdx = element.StartDeps[c] - 1 // last op from client c that must precede this
-      if (depIdx < 0) continue // no dependency on this client
+      if (c === element.ClientId) continue // Skip self
+      const depIdx = element.StartDeps[c] - 1 // Last op from client c that must precede this
+      if (depIdx < 0) continue // No dependency on this client
       if (!Object.hasOwn(clientOpsMap, c)) continue
       const srcOps = clientOpsMap[c]
       if (depIdx >= srcOps.length) continue
-      const srcElem = srcOps[depIdx]
+      const srcElement = srcOps[depIdx]
 
-      const srcX = t0x + xPos[srcElem.Start]
-      const srcY = PADDING + srcElem.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
+      const srcX = t0x + xPos[srcElement.Start]
+      const srcY = PADDING + srcElement.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
 
       // Connecting line (same y-edge logic as LP lines)
       svgadd(depArrowGroup, 'line', {
         x1: srcX,
         x2: targetX,
-        y1: srcElem.ClientId >= element.ClientId ? srcY : srcY + BOX_HEIGHT + 2 * LINE_BLEED,
-        y2: srcElem.ClientId <= element.ClientId ? targetY : targetY + BOX_HEIGHT + 2 * LINE_BLEED,
+        y1: srcElement.ClientId >= element.ClientId ? srcY : srcY + BOX_HEIGHT + 2 * LINE_BLEED,
+        y2:
+          srcElement.ClientId <= element.ClientId ? targetY : targetY + BOX_HEIGHT + 2 * LINE_BLEED,
         class: 'dep-constraint dep-constraint-line',
       })
 
@@ -710,7 +714,7 @@ function render(data) {
 
   function clearDepArrows() {
     while (depArrowGroup.firstChild) {
-      depArrowGroup.removeChild(depArrowGroup.firstChild)
+      depArrowGroup.firstChild.remove()
     }
   }
 
@@ -735,11 +739,7 @@ function render(data) {
   function highlight(partition, index) {
     // Hide all but this partition
     for (const [i, layer] of historyLayers.entries()) {
-      if (i === partition) {
-        layer.classList.remove('hidden')
-      } else {
-        layer.classList.add('hidden')
-      }
+      layer.classList.toggle('hidden', !(i === partition))
     }
 
     // Hide all but the relevant linearization
@@ -875,11 +875,7 @@ function render(data) {
     // Show longest linearizations, which are first
     for (const layers of partialLayers) {
       for (const [i, l] of layers.entries()) {
-        if (i === 0) {
-          l.classList.remove('hidden')
-        } else {
-          l.classList.add('hidden')
-        }
+        l.classList.toggle('hidden', !(i === 0))
       }
     }
 
