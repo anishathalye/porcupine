@@ -692,14 +692,8 @@ function render(data) {
       svgadd(depArrowGroup, 'line', {
         x1: srcX,
         x2: targetX,
-        y1:
-          srcElem.ClientId >= element.ClientId
-            ? srcY
-            : srcY + BOX_HEIGHT + 2 * LINE_BLEED,
-        y2:
-          srcElem.ClientId <= element.ClientId
-            ? targetY
-            : targetY + BOX_HEIGHT + 2 * LINE_BLEED,
+        y1: srcElem.ClientId >= element.ClientId ? srcY : srcY + BOX_HEIGHT + 2 * LINE_BLEED,
+        y2: srcElem.ClientId <= element.ClientId ? targetY : targetY + BOX_HEIGHT + 2 * LINE_BLEED,
         class: 'dep-constraint dep-constraint-line',
       })
 

@@ -122,27 +122,6 @@ func makeEntries(history []Operation, numClients int) (entries, OperationHistory
 	return entries, operationHistory
 }
 
-type node struct {
-	value interface{}
-	match *node // call if match is nil, otherwise return
-	id    int
-	next  *node
-	prev  *node
-}
-
-func insertBefore(n *node, mark *node) *node {
-	if mark != nil {
-		beforeMark := mark.prev
-		mark.prev = n
-		n.next = mark
-		if beforeMark != nil {
-			n.prev = beforeMark
-			beforeMark.next = n
-		}
-	}
-	return n
-}
-
 func renumber(events []Event) []Event {
 	var e []Event
 	m := make(map[int]int) // renumbering
@@ -185,139 +164,10 @@ func convertEntries(events []Event) (entries, int) {
 	return entries, maxClientId + 1
 }
 
-func makeLinkedEntries(entries entries) *node {
-	var root *node = nil
-	match := make(map[int]*node)
-	for i := len(entries) - 1; i >= 0; i-- {
-		elem := entries[i]
-		if elem.kind == returnEntry {
-			entry := &node{value: elem.value, match: nil, id: elem.id}
-			match[elem.id] = entry
-			insertBefore(entry, root)
-			root = entry
-		} else {
-			entry := &node{value: elem.value, match: match[elem.id], id: elem.id}
-			insertBefore(entry, root)
-			root = entry
-		}
-	}
-	return root
-}
-
 type cacheEntry struct {
 	linearized bitset
 	state      interface{}
 }
-
-func cacheContains(model Model, cache map[uint64][]cacheEntry, entry cacheEntry) bool {
-	for _, elem := range cache[entry.linearized.hash()] {
-		if entry.linearized.equals(elem.linearized) && model.Equal(entry.state, elem.state) {
-			return true
-		}
-	}
-	return false
-}
-
-type callsEntry struct {
-	entry *node
-	state interface{}
-}
-
-func lift(entry *node) {
-	entry.prev.next = entry.next
-	entry.next.prev = entry.prev
-	match := entry.match
-	match.prev.next = match.next
-	if match.next != nil {
-		match.next.prev = match.prev
-	}
-}
-
-func unlift(entry *node) {
-	match := entry.match
-	match.prev.next = match
-	if match.next != nil {
-		match.next.prev = match
-	}
-	entry.prev.next = entry
-	entry.next.prev = entry
-}
-
-// func checkSingle(model Model, history OperationHistory, computePartial bool, kill *int32) (bool, []*[]int) {
-// 	entry := makeLinkedEntries(history)
-// 	n := length(entry) / 2
-// 	linearized := newBitset(uint(n))
-// 	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
-// 	var calls []callsEntry
-// 	// longest linearizable prefix that includes the given entry
-// 	longest := make([]*[]int, n)
-
-// 	state := model.Init()
-// 	headEntry := insertBefore(&node{value: nil, match: nil, id: -1}, entry)
-// 	for headEntry.next != nil {
-// 		if atomic.LoadInt32(kill) != 0 {
-// 			return false, longest
-// 		}
-// 		if entry.match != nil {
-// 			matching := entry.match // the return entry
-// 			ok, newState := model.Step(state, entry.value, matching.value)
-// 			if ok {
-// 				newLinearized := linearized.clone().set(uint(entry.id))
-// 				newCacheEntry := cacheEntry{newLinearized, newState}
-// 				if !cacheContains(model, cache, newCacheEntry) {
-// 					hash := newLinearized.hash()
-// 					cache[hash] = append(cache[hash], newCacheEntry)
-// 					calls = append(calls, callsEntry{entry, state})
-// 					state = newState
-// 					linearized.set(uint(entry.id))
-// 					lift(entry)
-// 					entry = headEntry.next
-// 				} else {
-// 					entry = entry.next
-// 				}
-// 			} else {
-// 				entry = entry.next
-// 			}
-// 		} else {
-// 			if len(calls) == 0 {
-// 				return false, longest
-// 			}
-// 			// longest
-// 			if computePartial {
-// 				callsLen := len(calls)
-// 				var seq []int = nil
-// 				for _, v := range calls {
-// 					if longest[v.entry.id] == nil || callsLen > len(*longest[v.entry.id]) {
-// 						// create seq lazily
-// 						if seq == nil {
-// 							seq = make([]int, len(calls))
-// 							for i, v := range calls {
-// 								seq[i] = v.entry.id
-// 							}
-// 						}
-// 						longest[v.entry.id] = &seq
-// 					}
-// 				}
-// 			}
-// 			callsTop := calls[len(calls)-1]
-// 			entry = callsTop.entry
-// 			state = callsTop.state
-// 			linearized.clear(uint(entry.id))
-// 			calls = calls[:len(calls)-1]
-// 			unlift(entry)
-// 			entry = entry.next
-// 		}
-// 	}
-// 	// longest linearization is the complete linearization, which is calls
-// 	seq := make([]int, len(calls))
-// 	for i, v := range calls {
-// 		seq[i] = v.entry.id
-// 	}
-// 	for i := 0; i < n; i++ {
-// 		longest[i] = &seq
-// 	}
-// 	return true, longest
-// }
 
 func fillDefault(model Model) Model {
 	if model.Partition == nil {
@@ -435,7 +285,7 @@ func checkEvents(model Model, consistency Consistency, history []Event, verbose 
 		clientOperations := make(map[int][]ClientOperation)
 		maxClientId := 0
 		for j, ev := range l[i] {
-			if ev.kind == false { // call
+			if !ev.kind { // call
 				op := Operation{
 					ClientId: ev.clientId,
 					OpKind:   ev.opKind,
