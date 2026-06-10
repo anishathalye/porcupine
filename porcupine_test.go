@@ -297,6 +297,144 @@ func checkJepsen(t *testing.T, logNum int, correct bool) {
 	}
 }
 
+func TestEtcdConsistency(t *testing.T) {
+	// compare operations by their revision numbers (OrderHint)
+	revisionOracle := Oracle{
+		Compare: func(a *Operation, b *Operation) (OrderKind, error) {
+			if a.OrderHint.(int) < b.OrderHint.(int) {
+				return HardBefore, nil
+			}
+			if a.OrderHint.(int) > b.OrderHint.(int) {
+				return HardAfter, nil
+			}
+			return Unconstrained, nil
+		},
+	}
+
+	// etcd consistency is linearizability with an additional constraint that
+	// operations are ordered by their revision numbers
+	etcdConsistency := Consistency{
+		Oracles: append([]Oracle{revisionOracle}, LinearizabilityOracles...),
+		Valid:   RVal,
+	}
+
+	// Hints match actual order
+	ops := []Operation{
+		{ClientId: 0, Input: registerInput{false, 100}, Output: 0, Call: 0, Return: 100, OrderHint: 2},
+		{ClientId: 1, Input: registerInput{true, 0}, Output: 100, Call: 25, Return: 75, OrderHint: 3},
+		{ClientId: 2, Input: registerInput{true, 0}, Output: 0, Call: 30, Return: 60, OrderHint: 1},
+	}
+
+	res := CheckOperationsWithConsistency(registerModel, etcdConsistency, ops)
+	if res != true {
+		t.Fatal("expected operations to be serializable")
+	}
+
+	// Out of order hints
+	ops = []Operation{
+		{ClientId: 0, Input: registerInput{false, 100}, Output: 0, Call: 0, Return: 100, OrderHint: 1},
+		{ClientId: 1, Input: registerInput{true, 0}, Output: 100, Call: 25, Return: 75, OrderHint: 3},
+		{ClientId: 2, Input: registerInput{true, 0}, Output: 0, Call: 30, Return: 60, OrderHint: 2},
+	}
+
+	res = CheckOperationsWithConsistency(registerModel, etcdConsistency, ops)
+	if res != false {
+		t.Fatal("expected operations to not be serializable")
+	}
+
+	// Non linearizable history
+	ops = []Operation{
+		{ClientId: 0, Input: registerInput{false, 200}, Output: 0, Call: 0, Return: 100, OrderHint: 1},
+		{ClientId: 1, Input: registerInput{true, 0}, Output: 200, Call: 10, Return: 30, OrderHint: 2},
+		{ClientId: 2, Input: registerInput{true, 0}, Output: 0, Call: 40, Return: 90, OrderHint: 3},
+	}
+	CheckOperationsWithConsistency(registerModel, etcdConsistency, ops)
+}
+
+type multiRegisterInput struct {
+	op       bool
+	register string
+	value    int
+}
+
+var multiRegisterModel = Model{
+	Init: func() interface{} {
+		return map[string]int{
+			"x": 0,
+			"y": 0,
+		}
+	},
+	Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
+		stateMap := state.(map[string]int)
+		in := input.(multiRegisterInput)
+		out := output.(int)
+		var ok bool
+		newState := make(map[string]int)
+		for k, v := range stateMap {
+			newState[k] = v
+		}
+		if in.op { //read
+			ok = out == newState[in.register]
+		} else { //write
+			ok = true
+			newState[in.register] = in.value
+		}
+		return ok, newState
+	},
+	Equal: func(state1, state2 interface{}) bool {
+		sm1 := state1.(map[string]int)
+		sm2 := state2.(map[string]int)
+		if len(sm1) != len(sm2) {
+			return false
+		}
+		for k, v := range sm1 {
+			if v != sm2[k] {
+				return false
+			}
+		}
+		return true
+	},
+}
+
+func TestOrderedSequentialConsistency(t *testing.T) {
+	ops := []Operation{
+		{ClientId: 0, Input: registerInput{false, 100}, Output: 0, Call: 0, Return: 10, OpKind: Write},
+		{ClientId: 1, Input: registerInput{true, 0}, Output: 0, Call: 20, Return: 30, OpKind: Read}, // stale read
+	}
+
+	res := CheckOperationsWithConsistency(registerModel, OrderedSequentialConsistency, ops)
+	if res != true {
+		t.Fatal("expected operations to be osc")
+	}
+	res = CheckOperationsWithConsistency(registerModel, Linearizability, ops)
+	if res != false {
+		t.Fatal("expected operations to not be linearizable")
+	}
+
+	// Using Multi Key Model
+	ops = []Operation{
+		{ClientId: 0, Input: multiRegisterInput{false, "x", 100}, Output: 0, Call: 0, Return: 10, OpKind: Write},
+		{ClientId: 1, Input: multiRegisterInput{true, "x", 0}, Output: 0, Call: 40, Return: 50, OpKind: Read}, // stale read
+	}
+
+	res = CheckOperationsWithConsistency(multiRegisterModel, OrderedSequentialConsistency, ops)
+	if res != true {
+		t.Fatal("expected operations to be osc")
+	}
+
+	// Test write dependency
+	ops = []Operation{
+		{ClientId: 0, Input: multiRegisterInput{false, "x", 100}, Output: 0, Call: 0, Return: 10, OpKind: Write},
+		{ClientId: 1, Input: multiRegisterInput{false, "y", 200}, Output: 0, Call: 20, Return: 30, OpKind: Write}, // creates dependency
+		{ClientId: 1, Input: multiRegisterInput{true, "x", 0}, Output: 0, Call: 40, Return: 50, OpKind: Read},     // stale read
+	}
+
+	res = CheckOperationsWithConsistency(multiRegisterModel, OrderedSequentialConsistency, ops)
+	if res != false {
+		t.Fatal("expected operations to not be osc")
+	}
+}
+
 func TestEtcdJepsen000(t *testing.T) {
 	checkJepsen(t, 0, false)
 }

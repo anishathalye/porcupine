@@ -23,10 +23,11 @@ const (
 
 // Oracle encodes ordering constraints by comparing pairs of operations.
 type Oracle struct {
+	Params interface{}
 	// Preprocess adds additional info to clientOperations before comparison.
-	Preprocess func(op *ClientOperation, state interface{}) interface{}
+	Preprocess func(op *Operation, state interface{}) interface{}
 	// Compare returns the ordering relationship between two operations.
-	Compare func(a *ClientOperation, b *ClientOperation) (OrderKind, error)
+	Compare func(a *Operation, b *Operation) (OrderKind, error)
 }
 
 // Validity defines valid serializations for a model.
@@ -46,7 +47,7 @@ type Consistency struct {
 func (c *Consistency) Check(a *ClientOperation, b *ClientOperation) (OrderKind, error) {
 	ok := Unconstrained
 	for _, o := range c.Oracles {
-		order, err := o.Compare(a, b)
+		order, err := o.Compare(&a.Op, &b.Op)
 		if err != nil {
 			return ok, err
 		}
@@ -84,18 +85,18 @@ func (c *Consistency) Preprocess(history OperationHistory) {
 		for i := range history {
 			var state interface{}
 			for j := range history[i] {
-				state = oracle.Preprocess(&history[i][j], state)
+				state = oracle.Preprocess(&history[i][j].Op, state)
 			}
 		}
 	}
 }
 
 var GeneralLikely = Oracle{
-	Compare: func(a *ClientOperation, b *ClientOperation) (OrderKind, error) {
-		if a.Op.Call < b.Op.Call {
+	Compare: func(a *Operation, b *Operation) (OrderKind, error) {
+		if a.Call < b.Call {
 			return SoftBefore, nil
 		}
-		if a.Op.Call > b.Op.Call {
+		if a.Call > b.Call {
 			return SoftAfter, nil
 		}
 		return Unconstrained, nil
@@ -103,11 +104,11 @@ var GeneralLikely = Oracle{
 }
 
 var RealTime = Oracle{
-	Compare: func(a *ClientOperation, b *ClientOperation) (OrderKind, error) {
-		if a.Op.Return < b.Op.Call {
+	Compare: func(a *Operation, b *Operation) (OrderKind, error) {
+		if a.Return < b.Call {
 			return HardBefore, nil
 		}
-		if a.Op.Call > b.Op.Return {
+		if a.Call > b.Return {
 			return HardAfter, nil
 		}
 		return Unconstrained, nil
@@ -116,58 +117,58 @@ var RealTime = Oracle{
 
 var LinearizabilityOracles = []Oracle{RealTime, GeneralLikely}
 
-var RealTimeWrites = Oracle{
-	Preprocess: func(op *ClientOperation, state interface{}) interface{} {
-		type ppState struct {
-			openReads []*ClientOperation
-		}
-		s, _ := state.(*ppState)
-		if s == nil {
-			s = &ppState{}
-		}
-		if op.Op.OpKind == Write {
-			// with each open read, store this write's end time.
-			for _, r := range s.openReads {
-				if r.Params == nil {
-					r.Params = make(map[string]interface{})
+var RealTimeWrites = func() Oracle {
+	m := make(map[*Operation]int64)
+	return Oracle{
+		Params: m,
+		Preprocess: func(op *Operation, state interface{}) interface{} {
+			type ppState struct {
+				openReads []*Operation
+			}
+			s, _ := state.(*ppState)
+			if s == nil {
+				s = &ppState{}
+			}
+			if op.OpKind == Write {
+				// with each open read, store this write's end time.
+				for _, r := range s.openReads {
+					m[r] = op.Return
 				}
-				r.Params["nextWrite"] = op.Op.Return
+				s.openReads = nil
+			} else {
+				s.openReads = append(s.openReads, op)
 			}
-			s.openReads = nil
-		} else {
-			s.openReads = append(s.openReads, op)
-		}
-		return s
-	},
-	Compare: func(a *ClientOperation, b *ClientOperation) (OrderKind, error) {
-		if a.Op.OpKind == Write && b.Op.OpKind == Write {
-			return RealTime.Compare(a, b)
-		}
-		var read, write *ClientOperation
-		readIsA := false
-		if a.Op.OpKind != Write && b.Op.OpKind == Write {
-			read, write = a, b
-			readIsA = true
-		} else if a.Op.OpKind == Write && b.Op.OpKind != Write {
-			read, write = b, a
-			readIsA = false
-		} else {
-			return Unconstrained, nil
-		}
-		valNW, ok := read.Params["nextWrite"]
-		if !ok {
-			return Unconstrained, nil
-		}
-		nextWrite := valNW.(int64)
-		if write.Op.Call > nextWrite {
-			if readIsA {
-				return HardBefore, nil
+			return s
+		},
+		Compare: func(a *Operation, b *Operation) (OrderKind, error) {
+			if a.OpKind == Write && b.OpKind == Write {
+				return RealTime.Compare(a, b)
 			}
-			return HardAfter, nil
-		}
-		return Unconstrained, nil
-	},
-}
+			var read, write *Operation
+			readIsA := false
+			if a.OpKind != Write && b.OpKind == Write {
+				read, write = a, b
+				readIsA = true
+			} else if a.OpKind == Write && b.OpKind != Write {
+				read, write = b, a
+				readIsA = false
+			} else {
+				return Unconstrained, nil
+			}
+			nextWrite, ok := m[read]
+			if !ok {
+				return Unconstrained, nil
+			}
+			if write.Call > nextWrite {
+				if readIsA {
+					return HardBefore, nil
+				}
+				return HardAfter, nil
+			}
+			return Unconstrained, nil
+		},
+	}
+}()
 
 var OrderedSequentialConsistencyOracles = []Oracle{RealTimeWrites, GeneralLikely}
 

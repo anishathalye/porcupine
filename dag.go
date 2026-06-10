@@ -9,11 +9,10 @@ type OperationHistory [][]ClientOperation
 
 type ClientOperation struct {
 	Op      Operation
-	Id      int                    // global operation id
-	id      int                    // alias kept for internal use
-	Start   []int                  // Start[c] is the index of the first operation from client c that has no outgoing dependency to this op
-	visited bool                   // whether the Start of this op has been computed
-	Params  map[string]interface{} // parameters set by oracle preprocessors
+	Id      int   // global operation id
+	id      int   // alias kept for internal use
+	Start   []int // Start[c] is the index of the first operation from client c that has no outgoing dependency to this op
+	visited bool  // whether the Start of this op has been computed
 }
 
 func newclientOperation(op Operation, numClients int, id int) ClientOperation {
@@ -23,7 +22,7 @@ func newclientOperation(op Operation, numClients int, id int) ClientOperation {
 type client struct {
 	id     int
 	cltOps []ClientOperation // operations by this client
-	head   int               // head is not pushed to the stack yet
+	head   int               // head is index of first op of this client not pushed to the stack yet
 	nDeps  int               // number of unsatisfied dependencies for operation at head
 }
 
@@ -180,9 +179,8 @@ type stackEntry struct { // entry in the stack
 	frontierIdx int         // index of the operation in the frontier, sorted in descending order of soft constraints
 }
 
-// Try to lift the operation at the head of this client. If successful, push
-// it on the stack and return the new state.
-func (c *client) lift(model Model, consistency Consistency, oldState interface{}, stack *[]stackEntry,
+// Try to lift the operation at the head of this client.
+func (c *client) lift(model Model, consistency Consistency, oldState interface{},
 	cache map[uint64][]cacheEntry, serialized *bitset) (interface{}, bool) {
 	// Is this allowed by the sequential specification?
 	cltOp := c.cltOps[c.head]
@@ -205,13 +203,6 @@ func (c *client) lift(model Model, consistency Consistency, oldState interface{}
 	}
 
 	cache[hash] = append(cache[hash], cacheEntry{serialized.clone(), newState})
-	e := stackEntry{
-		opId:     cltOp.id,
-		clientId: c.id,
-		state:    oldState,
-		opIdx:    c.head,
-	}
-	*stack = append(*stack, e)
 	c.head++
 	return newState, ok
 }
@@ -231,9 +222,16 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 	// Try to lift an operation from the frontier starting from "liftFrom"
 	for idx := liftFrom; idx >= 0; idx-- {
 		i := ch.frontier[idx]
-		newState, success := ch.clients[i].lift(model, consistency, oldState, stack, cache, serialized)
+		e := stackEntry{
+			opId:        ch.clients[i].cltOps[ch.clients[i].head].id,
+			clientId:    ch.clients[i].id,
+			state:       oldState,
+			opIdx:       ch.clients[i].head,
+			frontierIdx: idx,
+		}
+		newState, success := ch.clients[i].lift(model, consistency, oldState, cache, serialized)
 		if success {
-			(*stack)[len(*stack)-1].frontierIdx = idx
+			*stack = append(*stack, e)
 			ch.computeStart(i, consistency)
 
 			ch.removeFromFrontier(i)
