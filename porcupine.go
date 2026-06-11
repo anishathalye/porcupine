@@ -49,30 +49,30 @@ func CheckEventsVerbose(model Model, history []Event, timeout time.Duration) (Ch
 
 // Check general consistency models
 
-func CheckOperationsWithConsistency(model Model, consistency Consistency, history []Operation) bool {
+func CheckOperationsConsistency(model Model, consistency Consistency, history []Operation) bool {
 	res, _ := checkOperations(model, consistency, history, false, 0)
 	return res == Ok
 }
 
-func CheckOperationsWithConsistencyTimeout(model Model, consistency Consistency, history []Operation, timeout time.Duration) CheckResult {
+func CheckOperationsConsistencyTimeout(model Model, consistency Consistency, history []Operation, timeout time.Duration) CheckResult {
 	res, _ := checkOperations(model, consistency, history, false, timeout)
 	return res
 }
 
-func CheckOperationsWithConsistencyVerbose(model Model, consistency Consistency, history []Operation, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func CheckOperationsConsistencyVerbose(model Model, consistency Consistency, history []Operation, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	return checkOperations(model, consistency, history, true, timeout)
 }
 
-func CheckEventsWithConsistency(model Model, consistency Consistency, history []Event) bool {
-	res, _ := checkEvents(model, Consistency{Oracles: LinearizabilityOracles}, history, false, 0)
+func CheckEventsConsistency(model Model, consistency Consistency, history []Event) bool {
+	res, _ := checkEvents(model, consistency, history, false, 0)
 	return res == Ok
 }
 
-func CheckEventsWithConsistencyTimeout(model Model, consistency Consistency, history []Event, timeout time.Duration) CheckResult {
+func CheckEventsConsistencyTimeout(model Model, consistency Consistency, history []Event, timeout time.Duration) CheckResult {
 	res, _ := checkEvents(model, consistency, history, false, timeout)
 	return res
 }
 
-func CheckEventsWithConsistencyVerbose(model Model, consistency Consistency, history []Event, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func CheckEventsConsistencyVerbose(model Model, consistency Consistency, history []Event, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	return checkEvents(model, consistency, history, true, timeout)
 }

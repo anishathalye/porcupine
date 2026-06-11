@@ -211,9 +211,10 @@ For performance reasons, the comparator implicitly contains session-order
 relations, i.e., ordering between operations from the same client session.
 Hence, the consistency model must be stronger than PRAM.
 
-A validity guarantee is represented using `Validity`. For example, the
-validity for a model which allows K-bounded reads (i.e., a read can return any
-value which was written by one of the last K writes) is as follows:
+A validity guarantee is represented using `Validity`. It defines the allowed
+sequence of operations in the sequential history. For example, the validity for
+a model which allows bounded stale reads (i.e., a read can return any value which
+was written by one of the last K writes) is as follows:
 
 ```go
 var kBoundedReadsValidity = porcupine.Validity{
@@ -256,7 +257,8 @@ kBoundedReadsConsistency = porcupine.Consistency{
 }
 ```
 
-To check general consistency models, use `porcupine.checkEventsConsistency()` instead of `porcupine.CheckEvents()`.
+To check general consistency models, use `porcupine.checkEventsConsistency()` or
+`porcupine.CheckOperationsConsistency()`.
 
 ### Visualizing histories
 
