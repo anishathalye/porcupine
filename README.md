@@ -171,8 +171,9 @@ models and histories.
 
 The paper [Consistency in Non-Transactional Distributed Storage Systems](https://dl.acm.org/doi/pdf/10.1145/2926965) decomposes and
 classifies many commonly used consistency models.  For example, Linearizability
-can be decomposed into three properties: $$ Linerizability(\mathcal{F})
-\triangleq SingleOrder \land RealTime \land RVal(\mathcal{F}) $$ where
+can be decomposed into three properties:
+$$\text{Linearizability}(\mathcal{F}) \triangleq \text{SingleOrder} \land \text{RealTime} \land \text{RVal}(\mathcal{F})$$
+where
 $\mathcal{F}$ represents the given sequential specification.
 
 * SingleOrder is the condition that there exists a sequential history equivalent to the
