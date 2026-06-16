@@ -255,19 +255,6 @@ func Visualize(model Model, info LinearizationInfo, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-
-	if f, ok := output.(*os.File); ok {
-		name := f.Name()
-		if name != "" && name != os.Stdout.Name() && name != os.Stderr.Name() {
-			dagPath := strings.TrimSuffix(name, ".html") + "_dag.html"
-			if f2, err := os.Create(dagPath); err == nil {
-				defer f2.Close()
-				if err := VisualizeDAG(data, f2); err != nil {
-					fmt.Printf("VisualizeDAG error: %v\n", err)
-				}
-			}
-		}
-	}
 	return nil
 }
 
@@ -282,6 +269,17 @@ func VisualizePath(model Model, info LinearizationInfo, path string) error {
 	return Visualize(model, info, f)
 }
 
+// VisualizeDAGPath is a wrapper around [VisualizeDAG] to write the DAG
+// visualization to a file path.
+func VisualizeDAGPath(model Model, info LinearizationInfo, path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return VisualizeDAG(model, info, f)
+}
+
 //go:embed visualization
 var visualizationFS embed.FS
 
@@ -293,9 +291,13 @@ type dagNode struct {
 	Start    string
 	End      string
 	Level    int
+	StartInt int
 }
 
-func VisualizeDAG(data visualizationData, output io.Writer) error {
+// VisualizeDAG produces a DAG-style visualization of a history and (partial) linearization
+// as an HTML file that can be viewed in a web browser.
+func VisualizeDAG(model Model, info LinearizationInfo, output io.Writer) error {
+	data := computeVisualizationData(model, info)
 	if len(data.Partitions) == 0 {
 		return nil
 	}
@@ -359,6 +361,7 @@ func VisualizeDAG(data visualizationData, output io.Writer) error {
 				Desc:     op.Description,
 				Start:    start,
 				End:      end,
+				StartInt: op.Start,
 			}
 			nodes[op.Id] = n
 			nodeByIndex[cid][origIdx] = n
@@ -405,14 +408,48 @@ func VisualizeDAG(data visualizationData, output io.Writer) error {
 		}
 	}
 
-	// Topological sort to assign levels
-	deg := make(map[int]int, len(inDegree))
-	for k, v := range inDegree {
-		deg[k] = v
+	// Sort node IDs by StartInt for deterministic iteration
+	var nodeIds []int
+	for id := range nodes {
+		nodeIds = append(nodeIds, id)
+	}
+	sort.Slice(nodeIds, func(i, j int) bool {
+		return nodes[nodeIds[i]].StartInt < nodes[nodeIds[j]].StartInt
+	})
+
+	// 1. Cycle detection
+	cycleEdge := make(map[edgeKey]bool)
+	color := make(map[int]int) // 0=white,1=gray,2=black
+	var dfs func(u int)
+	dfs = func(u int) {
+		color[u] = 1
+		for _, v := range adj[u] {
+			if color[v] == 1 {
+				cycleEdge[edgeKey{u, v}] = true
+			} else if color[v] == 0 {
+				dfs(v)
+			}
+		}
+		color[u] = 2
+	}
+	for _, id := range nodeIds {
+		if color[id] == 0 {
+			dfs(id)
+		}
+	}
+
+	// 2. Topological sort to assign levels (ignoring cycle edges)
+	deg := make(map[int]int)
+	for u, children := range adj {
+		for _, v := range children {
+			if !cycleEdge[edgeKey{u, v}] {
+				deg[v]++
+			}
+		}
 	}
 	var queue []int
-	for id, d := range deg {
-		if d == 0 {
+	for id := range nodes {
+		if deg[id] == 0 {
 			queue = append(queue, id)
 		}
 	}
@@ -423,6 +460,9 @@ func VisualizeDAG(data visualizationData, output io.Writer) error {
 		queue = queue[1:]
 		topo = append(topo, u)
 		for _, v := range adj[u] {
+			if cycleEdge[edgeKey{u, v}] {
+				continue
+			}
 			if levels[u]+1 > levels[v] {
 				levels[v] = levels[u] + 1
 			}
@@ -433,62 +473,37 @@ func VisualizeDAG(data visualizationData, output io.Writer) error {
 		}
 	}
 
-	hasCycle := len(topo) != len(nodes)
-	if hasCycle {
-		for _, n := range nodes {
-			n.Level = n.Index
-		}
-	} else {
-		for id, level := range levels {
-			nodes[id].Level = level
-		}
-	}
-
-	// Cycle detection
-	cycleEdge := make(map[edgeKey]bool)
-	if hasCycle {
-		color := make(map[int]int) // 0=white,1=gray,2=black
-		var dfs func(u int)
-		dfs = func(u int) {
-			color[u] = 1
-			for _, v := range adj[u] {
-				if color[v] == 1 {
-					cycleEdge[edgeKey{u, v}] = true
-				} else if color[v] == 0 {
-					dfs(v)
-				}
-			}
-			color[u] = 2
-		}
-		for id := range nodes {
-			if color[id] == 0 {
-				dfs(id)
-			}
-		}
+	for id, level := range levels {
+		nodes[id].Level = level
 	}
 
 	// Transitive reduction
 	// reach[u] = set of all nodes reachable from u via adj (not u itself).
 	// An edge u->w is redundant if w is reachable from some other child v of u.
 	redundant := make(map[edgeKey]bool)
-	if !hasCycle {
-		reach := make(map[int]map[int]bool, len(nodes))
-		for i := len(topo) - 1; i >= 0; i-- {
-			u := topo[i]
-			reach[u] = make(map[int]bool)
-			children := adj[u]
-			for _, v := range children {
-				reach[u][v] = true
-				for w := range reach[v] {
-					reach[u][w] = true
-				}
+	reach := make(map[int]map[int]bool, len(nodes))
+	for i := len(topo) - 1; i >= 0; i-- {
+		u := topo[i]
+		reach[u] = make(map[int]bool)
+
+		var children []int
+		for _, v := range adj[u] {
+			if !cycleEdge[edgeKey{u, v}] {
+				children = append(children, v)
 			}
-			// u->w is redundant if w is reachable via a different child of u.
-			for ci, v := range children {
-				for cj, w := range children {
-					if ci != cj && reach[v][w] {
-						redundant[edgeKey{u, w}] = true
-					}
+		}
+
+		for _, v := range children {
+			reach[u][v] = true
+			for w := range reach[v] {
+				reach[u][w] = true
+			}
+		}
+		// u->w is redundant if w is reachable via a different child of u.
+		for ci, v := range children {
+			for cj, w := range children {
+				if ci != cj && reach[v][w] {
+					redundant[edgeKey{u, w}] = true
 				}
 			}
 		}
@@ -516,6 +531,9 @@ func VisualizeDAG(data visualizationData, output io.Writer) error {
 	for _, ids := range levelBuckets {
 		sort.Slice(ids, func(i, j int) bool {
 			ni, nj := nodes[ids[i]], nodes[ids[j]]
+			if ni.StartInt != nj.StartInt {
+				return ni.StartInt < nj.StartInt
+			}
 			if ni.ClientId != nj.ClientId {
 				return ni.ClientId < nj.ClientId
 			}
