@@ -44,7 +44,7 @@ type Consistency struct {
 	Valid Validity
 }
 
-func (c *Consistency) Check(a *ClientOperation, b *ClientOperation) (OrderKind, error) {
+func (c *Consistency) Check(a *clientOperation, b *clientOperation) (OrderKind, error) {
 	ok := Unconstrained
 	for _, o := range c.Oracles {
 		order, err := o.Compare(&a.Op, &b.Op)
@@ -77,7 +77,7 @@ func (c *Consistency) Check(a *ClientOperation, b *ClientOperation) (OrderKind, 
 	return ok, nil
 }
 
-func (c *Consistency) Preprocess(history OperationHistory) {
+func (c *Consistency) Preprocess(history operationHistory) {
 	for _, oracle := range c.Oracles {
 		if oracle.Preprocess == nil {
 			continue

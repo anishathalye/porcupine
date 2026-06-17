@@ -5,28 +5,28 @@ import (
 	"sync/atomic"
 )
 
-type OperationHistory [][]ClientOperation
+type operationHistory [][]clientOperation
 
-type ClientOperation struct {
-	Op      Operation
-	Id      int   // global operation id
-	id      int   // alias kept for internal use
-	Start   []int // Start[c] is the index of the first operation from client c that has no outgoing dependency to this op
-	visited bool  // whether the Start of this op has been computed
+type clientOperation struct {
+	Op        Operation
+	globalId  int   // global operation id
+	id        int   // partition-local id
+	firstConc []int // firstConc[c] is the index of the first operation from client c that has no outgoing dependency to this op
+	visited   bool  // whether the firstConc of this op has been computed
 }
 
-func newclientOperation(op Operation, numClients int, id int) ClientOperation {
-	return ClientOperation{Op: op, Id: id, id: id, Start: nil, visited: false}
+func newclientOperation(op Operation, numClients int, id int) clientOperation {
+	return clientOperation{Op: op, globalId: id, id: id, firstConc: nil, visited: false}
 }
 
 type client struct {
 	id     int
-	cltOps []ClientOperation // operations by this client
+	cltOps []clientOperation // operations by this client
 	head   int               // head is index of first op of this client not pushed to the stack yet
 	nDeps  int               // number of unsatisfied dependencies for operation at head
 }
 
-func (ch *chains) computeStart(c int, consistency Consistency) {
+func (ch *chains) computeFirstConc(c int, consistency Consistency) {
 	if ch.clients[c].head >= len(ch.clients[c].cltOps) || ch.clients[c].cltOps[ch.clients[c].head].visited {
 		return
 	}
@@ -37,11 +37,11 @@ func (ch *chains) computeStart(c int, consistency Consistency) {
 		if c == d {
 			continue
 		}
-		start := 0
+		firstConc := 0
 		if ch.clients[c].head > 0 {
-			start = ch.clients[c].cltOps[ch.clients[c].head-1].Start[d]
+			firstConc = ch.clients[c].cltOps[ch.clients[c].head-1].firstConc[d]
 		}
-		i := start
+		i := firstConc
 		step := 1
 		for i < len(ch.clients[d].cltOps) {
 			order, err := consistency.Check(&ch.clients[d].cltOps[i], op)
@@ -60,8 +60,8 @@ func (ch *chains) computeStart(c int, consistency Consistency) {
 			high = len(ch.clients[d].cltOps)
 		}
 		low := i - step/2
-		if low < start {
-			low = start
+		if low < firstConc {
+			low = firstConc
 		}
 		for low < high {
 			mid := low + (high-low)/2
@@ -75,7 +75,7 @@ func (ch *chains) computeStart(c int, consistency Consistency) {
 				high = mid
 			}
 		}
-		op.Start[d] = low
+		op.firstConc[d] = low
 	}
 	op.visited = true
 }
@@ -128,7 +128,7 @@ func (chains *chains) isComplete() bool {
 }
 
 // Build the initial chains and frontier
-func newChains(history OperationHistory, consistency Consistency) chains {
+func newChains(history operationHistory, consistency Consistency) chains {
 	numClients := len(history)
 	clients := make([]client, numClients)
 	n := 0
@@ -142,21 +142,21 @@ func newChains(history OperationHistory, consistency Consistency) chains {
 		n += len(c)
 	}
 
-	starts := make([]int, n*numClients)
+	firstConcs := make([]int, n*numClients)
 	for i := 0; i < numClients; i++ {
 		for j := 0; j < len(clients[i].cltOps); j++ {
-			clients[i].cltOps[j].Start = starts[clients[i].cltOps[j].id*numClients : (clients[i].cltOps[j].id+1)*numClients]
+			clients[i].cltOps[j].firstConc = firstConcs[clients[i].cltOps[j].id*numClients : (clients[i].cltOps[j].id+1)*numClients]
 		}
 	}
 
 	ch := chains{clients: clients, numOps: n, frontier: make([]int, 0, numClients)}
 	for i := 0; i < numClients; i++ {
-		ch.computeStart(i, consistency)
+		ch.computeFirstConc(i, consistency)
 		ch.clients[i].nDeps = 0
 		if len(ch.clients[i].cltOps) > 0 {
 			op := ch.clients[i].cltOps[0]
 			for j := 0; j < numClients; j++ {
-				if j != i && op.Start[j] > 0 {
+				if j != i && op.firstConc[j] > 0 {
 					ch.clients[i].nDeps++
 				}
 			}
@@ -232,7 +232,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 		newState, success := ch.clients[i].lift(model, consistency, oldState, cache, serialized)
 		if success {
 			*stack = append(*stack, e)
-			ch.computeStart(i, consistency)
+			ch.computeFirstConc(i, consistency)
 
 			ch.removeFromFrontier(i)
 
@@ -240,7 +240,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 				opI := ch.clients[i].cltOps[ch.clients[i].head]
 				ch.clients[i].nDeps = 0
 				for k := 0; k < len(ch.clients); k++ {
-					if k != i && opI.Start[k] > ch.clients[k].head {
+					if k != i && opI.firstConc[k] > ch.clients[k].head {
 						ch.clients[i].nDeps++
 					}
 				}
@@ -251,7 +251,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 
 			for j := 0; j < len(ch.clients); j++ {
 				if j != i && ch.clients[j].head < len(ch.clients[j].cltOps) {
-					if ch.clients[j].cltOps[ch.clients[j].head].Start[i] == ch.clients[i].head {
+					if ch.clients[j].cltOps[ch.clients[j].head].firstConc[i] == ch.clients[i].head {
 						ch.clients[j].nDeps--
 						if ch.clients[j].nDeps == 0 {
 							ch.addToFrontier(j, consistency)
@@ -279,7 +279,7 @@ func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset, consistency Co
 
 	for j := 0; j < len(ch.clients); j++ {
 		if j != clientId && ch.clients[j].head < len(ch.clients[j].cltOps) {
-			if ch.clients[j].cltOps[ch.clients[j].head].Start[clientId] == ch.clients[clientId].head+1 {
+			if ch.clients[j].cltOps[ch.clients[j].head].firstConc[clientId] == ch.clients[clientId].head+1 {
 				if ch.clients[j].nDeps == 0 {
 					ch.removeFromFrontier(j)
 				}
@@ -292,7 +292,7 @@ func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset, consistency Co
 	return top.state, top.frontierIdx
 }
 
-func checkSingle(model Model, consistency Consistency, history OperationHistory, computePartial bool, kill *int32) (bool, []*[]int) {
+func checkSingle(model Model, consistency Consistency, history operationHistory, computePartial bool, kill *int32) (bool, []*[]int) {
 	// Initialize chains
 	ch := newChains(history, consistency)
 

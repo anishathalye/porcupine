@@ -19,7 +19,7 @@ type historyElement struct {
 	Description   string
 	Metadata      string
 	Id            int
-	StartDeps     []int
+	FirstConc     []int
 }
 
 type annotation struct {
@@ -158,7 +158,7 @@ func computeVisualizationData(model Model, info LinearizationInfo) visualization
 		for _, cltOps := range info.history[partition] {
 			for _, cltOp := range cltOps {
 				op := cltOp.Op
-				id := cltOp.Id
+				id := cltOp.globalId
 				history[id].ClientId = op.ClientId
 				history[id].Start = timeMap[op.Call]
 				history[id].OriginalStart = fmt.Sprintf("%d", op.Call)
@@ -166,8 +166,8 @@ func computeVisualizationData(model Model, info LinearizationInfo) visualization
 				history[id].OriginalEnd = fmt.Sprintf("%d", op.Return)
 				history[id].Description = model.DescribeOperation(op.Input, op.Output)
 				history[id].Metadata = model.DescribeOperationMetadata(op.Metadata)
-				history[id].Id = cltOp.Id
-				history[id].StartDeps = cltOp.Start
+				history[id].Id = cltOp.globalId
+				history[id].FirstConc = cltOp.firstConc
 				callValue[id] = op.Input
 				returnValue[id] = op.Output
 			}
@@ -397,7 +397,7 @@ func VisualizeDAG(model Model, info LinearizationInfo, output io.Writer) error {
 	// Inter-client dependency edges.
 	for _, ops := range clientOps {
 		for _, op := range ops {
-			for depCid, count := range op.StartDeps {
+			for depCid, count := range op.FirstConc {
 				if count > 0 {
 					depIndex := count - 1
 					if depNode, ok := nodeByIndex[depCid][depIndex]; ok && depNode.Id != op.Id {

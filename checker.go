@@ -27,7 +27,7 @@ type entry struct {
 type entries []entry
 
 type LinearizationInfo struct {
-	history               []OperationHistory // for each partition, a list of client operations
+	history               []operationHistory // for each partition, a list of client operations
 	partialLinearizations [][][]int          // for each partition, a set of histories (list of ids)
 	annotations           []Annotation
 }
@@ -57,7 +57,7 @@ func (li *LinearizationInfo) PartialLinearizationsOperations() [][][]Operation {
 		opMap := make(map[int]Operation)
 		for _, cltOps := range clientOps {
 			for _, cltOp := range cltOps {
-				opMap[cltOp.Id] = cltOp.Op
+				opMap[cltOp.globalId] = cltOp.Op
 			}
 		}
 
@@ -100,10 +100,10 @@ func (a byTime) Less(i, j int) bool {
 	return a[i].kind == callEntry && a[j].kind == returnEntry
 }
 
-func makeEntries(history []Operation, numClients int) (entries, OperationHistory) {
+func makeEntries(history []Operation, numClients int) (entries, operationHistory) {
 	var entries entries = nil
 	id := 0
-	operationHistory := make(OperationHistory, numClients)
+	operationHistory := make(operationHistory, numClients)
 	for _, elem := range history {
 		entries = append(entries, entry{
 			kind: callEntry, value: elem.Input, id: id, time: elem.Call,
@@ -191,7 +191,7 @@ func fillDefault(model Model) Model {
 	return model
 }
 
-func checkParallel(model Model, consistency Consistency, history []OperationHistory, entries []entries, computeInfo bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func checkParallel(model Model, consistency Consistency, history []operationHistory, entries []entries, computeInfo bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	if len(history) == 0 {
 		return Ok, LinearizationInfo{}
 	}
@@ -201,7 +201,7 @@ func checkParallel(model Model, consistency Consistency, history []OperationHist
 	longest := make([][]*[]int, len(history))
 	kill := int32(0)
 	for i, subhistory := range history {
-		go func(i int, subhistory OperationHistory) {
+		go func(i int, subhistory operationHistory) {
 			ok, l := checkSingle(model, consistency, subhistory, computeInfo, &kill)
 			longest[i] = l
 			results <- ok
@@ -277,12 +277,12 @@ func checkEvents(model Model, consistency Consistency, history []Event, verbose 
 	model = fillDefault(model)
 	partitions := model.PartitionEvent(history)
 	l := make([]entries, len(partitions))
-	operationHistories := make([]OperationHistory, 0, len(partitions))
+	operationHistories := make([]operationHistory, 0, len(partitions))
 	var numClients int
 	for i, subhistory := range partitions {
 		l[i], numClients = convertEntries(renumber(subhistory))
-		operationHistory := make([][]ClientOperation, 0)
-		clientOperations := make(map[int][]ClientOperation)
+		operationHistory := make([][]clientOperation, 0)
+		clientOperations := make(map[int][]clientOperation)
 		maxClientId := 0
 		for j, ev := range l[i] {
 			if !ev.kind { // call
@@ -332,7 +332,7 @@ func checkOperations(model Model, consistency Consistency, history []Operation, 
 	}
 	partitions := model.Partition(history)
 	l := make([]entries, len(partitions))
-	operationHistories := make([]OperationHistory, len(partitions))
+	operationHistories := make([]operationHistory, len(partitions))
 
 	for i, subhistory := range partitions {
 		l[i], operationHistories[i] = makeEntries(subhistory, maxClientId+1)
