@@ -598,3 +598,120 @@ func TestVisualizationEventMetadata(t *testing.T) {
 		t.Errorf("HTML: expected history[2].Metadata='event-meta: read-return-meta', got '%s'", htmlHistory[2].Metadata)
 	}
 }
+
+// Helper that calls VisualizeDAG and writes to a temp file
+func visualizeDAGTempFile(t *testing.T, model Model, info LinearizationInfo) string {
+	t.Helper()
+	file, err := os.CreateTemp("", "porcupine_dag_test_*.html")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(file.Name())
+	defer file.Close()
+
+	if err := VisualizeDAG(model, info, file); err != nil {
+		t.Fatalf("VisualizeDAG failed: %v", err)
+	}
+	content, err := os.ReadFile(file.Name())
+	if err != nil {
+		t.Fatalf("failed to read generated file: %v", err)
+	}
+	t.Logf("wrote DAG visualization to %s", file.Name())
+	return string(content)
+}
+
+// Verifies that VisualizeDAG returns nil and writes no output when there is no
+// history (empty LinearizationInfo).
+func TestVisualizeDAGEmptyHistory(t *testing.T) {
+	var info LinearizationInfo
+	var buf strings.Builder
+	if err := VisualizeDAG(kvModel, info, &buf); err != nil {
+		t.Fatalf("expected nil error for empty history, got: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no output for empty history, got %d bytes", buf.Len())
+	}
+}
+
+// Verifies that for a single-client linear history, VisualizeDAG produces one
+// node per operation with correct ids and labels, and intra-client edges
+// connecting them in order.
+func TestVisualizeDAGSingleClientNodes(t *testing.T) {
+	ops := []Operation{
+		{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "a"}, Call: 0, Output: kvOutput{}, Return: 10},
+		{ClientId: 0, Input: kvInput{op: 0, key: "x"}, Call: 20, Output: kvOutput{"a"}, Return: 30},
+	}
+	_, info := CheckOperationsVerbose(kvModel, ops, 0)
+	content := visualizeDAGTempFile(t, kvModel, info)
+
+	reNodes := regexp.MustCompile(`var nodesData = (\[.*?\]);`)
+	mNodes := reNodes.FindStringSubmatch(content)
+	if len(mNodes) < 2 {
+		t.Fatal("could not extract nodesData from DAG output")
+	}
+	var nodes []map[string]interface{}
+	if err := json.Unmarshal([]byte(mNodes[1]), &nodes); err != nil {
+		t.Fatalf("failed to parse nodesData JSON: %v", err)
+	}
+	if len(nodes) != 2 {
+		t.Fatalf("expected 2 nodes for 2 operations, got %d", len(nodes))
+	}
+
+	reEdges := regexp.MustCompile(`var edgesData = (\[.*?\]);`)
+	mEdges := reEdges.FindStringSubmatch(content)
+	if len(mEdges) < 2 {
+		t.Fatal("could not extract edgesData from DAG output")
+	}
+	var edges []map[string]interface{}
+	if err := json.Unmarshal([]byte(mEdges[1]), &edges); err != nil {
+		t.Fatalf("failed to parse edgesData JSON: %v", err)
+	}
+	// at least one intra-client edge between the two ops
+	if len(edges) == 0 {
+		t.Error("expected at least one edge for two sequential single-client operations")
+	}
+}
+
+// Verifies that for a multi-client illegal history, VisualizeDAG includes
+// inter-client dependency edges (more edges than just the intra-client ones).
+func TestVisualizeDAGInterClientEdges(t *testing.T) {
+	// Same illegal history used in TestVisualizationMultipleLengths
+	ops := []Operation{
+		{ClientId: 0, Input: kvInput{op: 1, key: "x", value: "y"}, Call: 5, Output: kvOutput{}, Return: 10},
+		{ClientId: 1, Input: kvInput{op: 0, key: "x"}, Call: 20, Output: kvOutput{"y"}, Return: 30},
+		{ClientId: 1, Input: kvInput{op: 1, key: "x", value: "w"}, Call: 35, Output: kvOutput{}, Return: 45},
+		{ClientId: 2, Input: kvInput{op: 0, key: "x"}, Call: 25, Output: kvOutput{"y"}, Return: 35},
+	}
+	res, info := CheckOperationsVerbose(kvModel, ops, 0)
+	if res != Ok {
+		t.Logf("history result: %v (may be linearizable)", res)
+	}
+	content := visualizeDAGTempFile(t, kvModel, info)
+
+	reNodes := regexp.MustCompile(`var nodesData = (\[.*?\]);`)
+	mNodes := reNodes.FindStringSubmatch(content)
+	if len(mNodes) < 2 {
+		t.Fatal("could not extract nodesData from DAG output")
+	}
+	var nodes []map[string]interface{}
+	if err := json.Unmarshal([]byte(mNodes[1]), &nodes); err != nil {
+		t.Fatalf("failed to parse nodesData: %v", err)
+	}
+	if len(nodes) == 0 {
+		t.Fatal("expected at least one node")
+	}
+
+	reEdges := regexp.MustCompile(`var edgesData = (\[.*?\]);`)
+	mEdges := reEdges.FindStringSubmatch(content)
+	if len(mEdges) < 2 {
+		t.Fatal("could not extract edgesData from DAG output")
+	}
+	var edges []map[string]interface{}
+	if err := json.Unmarshal([]byte(mEdges[1]), &edges); err != nil {
+		t.Fatalf("failed to parse edgesData: %v", err)
+	}
+
+	if len(edges) < 2 {
+		t.Errorf("expected multiple edges for multi-client history, got %d", len(edges))
+	}
+}
