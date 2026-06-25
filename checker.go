@@ -211,9 +211,9 @@ type cacheEntry struct {
 	state      interface{}
 }
 
-func cacheContains(model Model, cache map[uint64][]cacheEntry, entry cacheEntry) bool {
-	for _, elem := range cache[entry.linearized.hash()] {
-		if entry.linearized.equals(elem.linearized) && model.Equal(entry.state, elem.state) {
+func cacheContains(model Model, bucket []cacheEntry, linearized bitset, state interface{}) bool {
+	for _, elem := range bucket {
+		if linearized.equals(elem.linearized) && model.Equal(state, elem.state) {
 			return true
 		}
 	}
@@ -267,17 +267,17 @@ func checkSingle(ctx context.Context, model Model, history []entry, computeParti
 				return false, longest
 			}
 			if ok {
-				newLinearized := linearized.clone().set(uint(entry.id))
-				newCacheEntry := cacheEntry{newLinearized, newState}
-				if !cacheContains(model, cache, newCacheEntry) {
-					hash := newLinearized.hash()
-					cache[hash] = append(cache[hash], newCacheEntry)
+				linearized.set(uint(entry.id))
+				hash := linearized.hash()
+				bucket := cache[hash]
+				if !cacheContains(model, bucket, linearized, newState) {
+					cache[hash] = append(bucket, cacheEntry{linearized.clone(), newState})
 					calls = append(calls, callsEntry{entry, state})
 					state = newState
-					linearized.set(uint(entry.id))
 					lift(entry)
 					entry = headEntry.next
 				} else {
+					linearized.clear(uint(entry.id))
 					entry = entry.next
 				}
 			} else {
