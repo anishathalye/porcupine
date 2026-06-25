@@ -1,4 +1,4 @@
-'use strict' // eslint-disable-line unicorn/prefer-module
+'use strict'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
@@ -98,6 +98,8 @@ function render(data) {
 
   // Add synthetic client numbers
   const tag2ClientId = {}
+  // `tags` is a collection of strings, so we do want to sort lexicographically
+  // eslint-disable-next-line unicorn/require-array-sort-compare
   const sortedTags = [...tags].toSorted()
   for (const tag of sortedTags) {
     maxClient += 1
@@ -267,7 +269,7 @@ function render(data) {
           width,
           gid: element.Gid,
         }
-      })
+      }),
     )
     .toSorted((a, b) => a.end - b.end)
   // Some preprocessing for linearization points and illegal next
@@ -283,9 +285,9 @@ function render(data) {
       const included = new Set() // For figuring out illegal next LPs
       for (const [position, id] of lin.entries()) {
         included.add(id.Index)
-        const gid = partition.History[id.Index].Gid
-        globalized.push(gid)
-        eventToLinearizations[gid].push({index: lgid, position})
+        const eventGid = partition.History[id.Index].Gid
+        globalized.push(eventGid)
+        eventToLinearizations[eventGid].push({index: lgid, position})
       }
 
       allLinearizations.push(globalized)
@@ -330,23 +332,18 @@ function render(data) {
       // out the minimum width that the box needs to be to accommodate the LP.
       for (const li of [
         ...eventToLinearizations[event_.gid],
-        ...eventIllegalLast[event_.gid].map((index) => {
-          return {
-            index,
-            position: allLinearizations[index].length - 1,
-          }
-        }),
+        ...eventIllegalLast[event_.gid].map((index) => ({
+          index,
+          position: allLinearizations[index].length - 1,
+        })),
       ]) {
         const {index, position} = li
-        for (let i = linearizationPositions[index].length; i <= position; i++) {
+        for (let j = linearizationPositions[index].length; j <= position; j++) {
           // Determine past points
-          let previous = null
-          // eslint-disable-next-line max-depth
-          if (linearizationPositions[index].length > 0) {
-            previous = linearizationPositions[index][i - 1]
-          }
+          const previous =
+            linearizationPositions[index].length > 0 ? linearizationPositions[index][j - 1] : null
 
-          const nextGid = allLinearizations[index][i]
+          const nextGid = allLinearizations[index][j]
           const nextPos =
             previous === null
               ? xPos[byGid[nextGid].Start]
@@ -400,18 +397,18 @@ function render(data) {
   let selected = false
   let selectedIndex = [-1, -1]
 
-  const height = 2 * PADDING + BOX_HEIGHT * nClient + BOX_SPACE * (nClient - 1)
-  const width = 2 * PADDING + maxTagWidth + xPos[sortedTimestamps.at(-1)]
+  const canvasHeight = 2 * PADDING + BOX_HEIGHT * nClient + BOX_SPACE * (nClient - 1)
+  const canvasWidth = 2 * PADDING + maxTagWidth + xPos[sortedTimestamps.at(-1)]
   const svg = svgadd(document.querySelector('#canvas'), 'svg', {
-    width,
-    height,
+    height: canvasHeight,
+    width: canvasWidth,
   })
 
   // Draw background, etc.
   const bg = svgadd(svg, 'g')
   const bgRect = svgadd(bg, 'rect', {
-    height,
-    width,
+    height: canvasHeight,
+    width: canvasWidth,
     x: 0,
     y: 0,
     class: 'bg',
@@ -431,7 +428,7 @@ function render(data) {
     x1: t0x,
     y1: PADDING,
     x2: t0x,
-    y2: height - PADDING,
+    y2: canvasHeight - PADDING,
     class: 'divider',
   })
   // Horizontal line dividing clients from annotation tags, but only if there are tags
@@ -474,7 +471,7 @@ function render(data) {
             element.Annotation && element.BackgroundColor.length > 0
               ? `fill: ${element.BackgroundColor};`
               : '',
-        })
+        }),
       )
       const text = svgadd(g, 'text', {
         x: x + width / 2,
@@ -508,15 +505,11 @@ function render(data) {
   }
 
   // Draw partial linearizations
-  const illegalLast = coreHistory.map((partition) => {
-    return partition.PartialLinearizations.map(() => new Set())
-  })
-  const largestIllegal = coreHistory.map(() => {
-    return {}
-  })
-  const largestIllegalLength = coreHistory.map(() => {
-    return {}
-  })
+  const illegalLast = coreHistory.map((partition) =>
+    partition.PartialLinearizations.map(() => new Set()),
+  )
+  const largestIllegal = coreHistory.map(() => ({}))
+  const largestIllegalLength = coreHistory.map(() => ({}))
   const partialLayers = []
   const errorPoints = []
   for (const [partitionIndex, partition] of coreHistory.entries()) {
@@ -628,12 +621,14 @@ function render(data) {
   tooltip.setAttribute('class', 'tooltip')
 
   function handleMouseOver() {
-    if (!selected) {
-      const partition = Number.parseInt(this.dataset.partition, 10)
-      const index = Number.parseInt(this.dataset.index, 10)
-      highlight(partition, index)
-      tooltip.style.display = 'block'
+    if (selected) {
+      return
     }
+
+    const partition = Number(this.dataset.partition)
+    const index = Number(this.dataset.index)
+    highlight(partition, index)
+    tooltip.style.display = 'block'
   }
 
   function linearizationIndex(partition, index) {
@@ -683,8 +678,8 @@ function render(data) {
       return
     }
 
-    const partition = Number.parseInt(this.dataset.partition, 10)
-    const index = Number.parseInt(this.dataset.index, 10)
+    const partition = Number(this.dataset.partition)
+    const index = Number(this.dataset.index)
     const [sPartition, sIndex] = selectedIndex
     const thisTooltip = [partition, index, selected, sPartition, sIndex]
 
@@ -777,11 +772,13 @@ function render(data) {
   }
 
   function handleMouseOut() {
-    if (!selected) {
-      resetHighlight()
-      tooltip.style.display = 'none'
-      lastTooltip = [null, null, null, null, null]
+    if (selected) {
+      return
     }
+
+    resetHighlight()
+    tooltip.style.display = 'none'
+    lastTooltip = [null, null, null, null, null]
   }
 
   function resetHighlight() {
@@ -831,8 +828,8 @@ function render(data) {
   }
 
   function handleClick(event_) {
-    const partition = Number.parseInt(this.dataset.partition, 10)
-    const index = Number.parseInt(this.dataset.index, 10)
+    const partition = Number(this.dataset.partition)
+    const index = Number(this.dataset.index)
     if (selected) {
       const [sPartition, sIndex] = selectedIndex
       if (partition === sPartition && index === sIndex) {
