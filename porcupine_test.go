@@ -1329,7 +1329,17 @@ var kvNoPartitionModel = Model{
 		}
 	},
 	Equal: func(state1, state2 interface{}) bool {
-		return reflect.DeepEqual(state1, state2)
+		s1 := state1.(map[string]string)
+		s2 := state2.(map[string]string)
+		if len(s1) != len(s2) {
+			return false
+		}
+		for k, v := range s1 {
+			if s2[k] != v {
+				return false
+			}
+		}
+		return true
 	},
 }
 
