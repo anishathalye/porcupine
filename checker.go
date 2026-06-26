@@ -158,15 +158,6 @@ func insertBefore(n *node, mark *node) *node {
 	return n
 }
 
-func length(n *node) int {
-	l := 0
-	for n != nil {
-		n = n.next
-		l++
-	}
-	return l
-}
-
 func renumber(events []Event) []Event {
 	var e []Event
 	m := make(map[int]int) // renumbering
@@ -256,7 +247,7 @@ func unlift(entry *node) {
 
 func checkSingle(ctx context.Context, model Model, history []entry, computePartial bool) (bool, []*[]int) {
 	entry := makeLinkedEntries(history)
-	n := length(entry) / 2
+	n := len(history) / 2
 	linearized := newBitset(uint(n))
 	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
 	var calls []callsEntry
