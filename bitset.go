@@ -1,6 +1,7 @@
 package porcupine
 
-import "math/bits"
+// From the MurmurHash3 64-bit finalizer
+const prime uint64 = 0xff51afd7ed558ccd
 
 type bitset []uint64
 
@@ -38,20 +39,13 @@ func (b bitset) clear(pos uint) bitset {
 	return b
 }
 
-func (b bitset) popcnt() uint {
-	total := 0
-	for _, v := range b {
-		total += bits.OnesCount64(v)
-	}
-	return uint(total)
-}
-
 func (b bitset) hash() uint64 {
-	hash := uint64(b.popcnt())
+	var h uint64
 	for _, v := range b {
-		hash ^= v
+		h ^= v
+		h *= prime
 	}
-	return hash
+	return h
 }
 
 func (b bitset) equals(b2 bitset) bool {
