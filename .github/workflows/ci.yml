@@ -36,7 +36,7 @@ jobs:
       - uses: actions/setup-go@v6
       - name: Test with Coverage
         run: go test -v  -coverprofile=coverage.txt -covermode=atomic ./...
-      - uses: codecov/codecov-action@v6
+      - uses: codecov/codecov-action@v7
         with:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
