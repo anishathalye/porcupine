@@ -48,7 +48,7 @@ func (b bitset) hash() uint64 {
 	return h
 }
 
-func (b bitset) equals(b2 bitset) bool {
+func (b bitset) equal(b2 bitset) bool {
 	if len(b) != len(b2) {
 		return false
 	}

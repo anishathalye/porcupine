@@ -213,7 +213,7 @@ type cacheEntry struct {
 
 func cacheContains(model Model, bucket []cacheEntry, linearized bitset, state interface{}) bool {
 	for _, elem := range bucket {
-		if linearized.equals(elem.linearized) && model.Equal(state, elem.state) {
+		if linearized.equal(elem.linearized) && model.Equal(state, elem.state) {
 			return true
 		}
 	}
