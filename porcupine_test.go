@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"os"
 	"reflect"
@@ -36,6 +37,9 @@ var registerModel = Model{
 			readCorrectValue := output == state
 			return readCorrectValue, state // state is unchanged
 		}
+	},
+	Hash: func(state interface{}) uint64 {
+		return uint64(state.(int))
 	},
 	DescribeOperation: func(input, output interface{}) string {
 		inp := input.(registerInput)
@@ -1285,6 +1289,11 @@ var kvModel = Model{
 			return true, (st + inp.value)
 		}
 	},
+	Hash: func(state interface{}) uint64 {
+		h := fnv.New64a()
+		h.Write([]byte(state.(string)))
+		return h.Sum64()
+	},
 	DescribeOperation: func(input, output interface{}) string {
 		inp := input.(kvInput)
 		out := output.(kvOutput)
@@ -1340,6 +1349,22 @@ var kvNoPartitionModel = Model{
 			}
 		}
 		return true
+	},
+	Hash: func(state interface{}) uint64 {
+		st := state.(map[string]string)
+		var h uint64
+		for k, v := range st {
+			// Each key-value pair is hashed independently, then XORed
+			// into the accumulator. XOR is order-independent, so the
+			// result is the same regardless of map iteration order.
+			// Sorting keys first would be another valid approach, but
+			// would require a memory allocation.
+			kh := fnv.New64a()
+			kh.Write([]byte(k))
+			kh.Write([]byte(v))
+			h ^= kh.Sum64()
+		}
+		return h
 	},
 }
 
@@ -1796,6 +1821,42 @@ func TestNondeterministicRegisterModel(t *testing.T) {
 	visualizeTempFile(t, model, info)
 }
 
+func TestNondeterministicRegisterModelWithHash(t *testing.T) {
+	nm := NondeterministicModel{
+		Init:  nondeterministicRegisterModel.Init,
+		Step:  nondeterministicRegisterModel.Step,
+		Equal: nondeterministicRegisterModel.Equal,
+		Hash: func(state interface{}) uint64 {
+			st := state.(nondeterministicRegisterState)
+			var h uint64
+			// state is a set, so this needs to be order-independent
+			for _, v := range st {
+				h ^= uint64(v)
+			}
+			return h
+		},
+		DescribeOperation: nondeterministicRegisterModel.DescribeOperation,
+	}
+	model := nm.ToModel()
+
+	events := []Event{
+		{Kind: CallEvent, Value: nondeterministicRegisterInput{1, []int{1, 2, 3, 4}}, Id: 0, ClientId: 0},
+		{Kind: CallEvent, Value: nondeterministicRegisterInput{2, nil}, Id: 1, ClientId: 1},
+		{Kind: CallEvent, Value: nondeterministicRegisterInput{2, nil}, Id: 2, ClientId: 2},
+		{Kind: CallEvent, Value: nondeterministicRegisterInput{3, nil}, Id: 3, ClientId: 3},
+		{Kind: ReturnEvent, Value: []int{2}, Id: 2, ClientId: 2},
+		{Kind: ReturnEvent, Value: []int{1, 4}, Id: 1, ClientId: 1},
+		{Kind: ReturnEvent, Value: []int{1, 2, 3}, Id: 3, ClientId: 3},
+		{Kind: ReturnEvent, Value: []int{}, Id: 0, ClientId: 0},
+	}
+
+	res, info := CheckEventsVerbose(model, events, 0)
+	if res != Illegal {
+		t.Fatal("expected operations to not be linearizable")
+	}
+	visualizeTempFile(t, model, info)
+}
+
 func TestNondeterministicModelToModelUsesStepContext(t *testing.T) {
 	var stepCalls int32
 	nondeterministicModel := NondeterministicModel{
@@ -1951,5 +2012,28 @@ func TestRegisterModelMetadata(t *testing.T) {
 		if expectedMeta[e.id] != e.metadata {
 			t.Errorf("entry %d (id %d) expected metadata %s, got %s", e.time, e.id, expectedMeta[e.id], e.metadata)
 		}
+	}
+}
+
+func TestNondeterministicModelHash(t *testing.T) {
+	nm := NondeterministicModel{
+		Init: func() []interface{} { return []interface{}{0} },
+		Step: func(state, input, output interface{}) []interface{} {
+			return []interface{}{state.(int) + 1}
+		},
+		Equal: func(a, b interface{}) bool { return a.(int) == b.(int) },
+		Hash: func(state interface{}) uint64 {
+			return uint64(state.(int))
+		},
+	}
+	m := nm.ToModel()
+	if m.Hash == nil {
+		t.Fatal("expected Hash to be wired through")
+	}
+	if m.Hash([]interface{}{1, 2}) != m.Hash([]interface{}{2, 1}) {
+		t.Fatal("Hash should be order-independent for equal sets")
+	}
+	if m.Hash([]interface{}{1, 2}) == m.Hash([]interface{}{1, 3}) {
+		t.Fatal("Hash should differ for (these particular) different sets")
 	}
 }

@@ -118,6 +118,10 @@ type Model struct {
 	// Equality on states. If left nil, this package will use == as a
 	// fallback ([ShallowEqual]).
 	Equal func(state1, state2 interface{}) bool
+	// Hash returns a hash of the given state. If non-nil, the checker uses
+	// it to reduce the number of [Equal] comparisons. Must satisfy the
+	// invariant that [Equal] states have equal hashes.
+	Hash func(state interface{}) uint64
 	// For visualization, describe an operation as a string. For example,
 	// "Get('x') -> 'y'". Can be omitted if you're not producing
 	// visualizations.
@@ -164,6 +168,10 @@ type NondeterministicModel struct {
 	// Equality on states. If left nil, this package will use == as a
 	// fallback ([ShallowEqual]).
 	Equal func(state1, state2 interface{}) bool
+	// Hash returns a hash of the given state. If non-nil, the checker uses
+	// it to reduce the number of [Equal] comparisons. Must satisfy the
+	// invariant that [Equal] states have equal hashes.
+	Hash func(state interface{}) uint64
 	// For visualization, describe an operation as a string. For example,
 	// "Get('x') -> 'y'". Can be omitted if you're not producing
 	// visualizations.
@@ -247,6 +255,19 @@ func (nm *NondeterministicModel) ToModel() Model {
 		uniqueNextStates := merge(allNextStates, equal)
 		return len(uniqueNextStates) > 0, uniqueNextStates
 	}
+	var hashState func(state interface{}) uint64
+	if nm.Hash != nil {
+		// using XOR for order-independent combination of the
+		// individual hashes, because state is a set
+		hashState = func(state interface{}) uint64 {
+			states := state.([]interface{})
+			var h uint64
+			for _, s := range states {
+				h ^= nm.Hash(s)
+			}
+			return h
+		}
+	}
 	backgroundContext := context.Background()
 	return Model{
 		Partition:      nm.Partition,
@@ -281,6 +302,7 @@ func (nm *NondeterministicModel) ToModel() Model {
 			}
 			return true
 		},
+		Hash:              hashState,
 		DescribeOperation: describeOperation,
 		DescribeState: func(state interface{}) string {
 			states := state.([]interface{})
