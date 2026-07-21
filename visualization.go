@@ -19,7 +19,7 @@ type historyElement struct {
 	Description   string
 	Metadata      string
 	Id            int
-	FirstConc     []int
+	FirstUnk     []int
 }
 
 type annotation struct {
@@ -167,7 +167,7 @@ func computeVisualizationData(model Model, info LinearizationInfo) visualization
 				history[id].Description = model.DescribeOperation(op.Input, op.Output)
 				history[id].Metadata = model.DescribeOperationMetadata(op.Metadata)
 				history[id].Id = cltOp.globalId
-				history[id].FirstConc = cltOp.firstConc
+				history[id].FirstUnk = cltOp.firstUnk
 				callValue[id] = op.Input
 				returnValue[id] = op.Output
 			}
@@ -397,7 +397,7 @@ func VisualizeDAG(model Model, info LinearizationInfo, output io.Writer) error {
 	// Inter-client dependency edges.
 	for _, ops := range clientOps {
 		for _, op := range ops {
-			for depCid, count := range op.FirstConc {
+			for depCid, count := range op.FirstUnk {
 				if count > 0 {
 					depIndex := count - 1
 					if depNode, ok := nodeByIndex[depCid][depIndex]; ok && depNode.Id != op.Id {

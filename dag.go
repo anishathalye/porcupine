@@ -11,12 +11,12 @@ type clientOperation struct {
 	Op        Operation
 	globalId  int   // global operation id
 	id        int   // partition-local id
-	firstConc []int // firstConc[c] is the index of the first operation from client c that has no outgoing dependency to this op
-	visited   bool  // whether the firstConc of this op has been computed
+	firstUnk  []int // firstUnk[c] is the index of the first operation from client c that has no outgoing HardBefore dependency to this op
+	visited   bool  // whether the firstUnk of this op has been computed
 }
 
 func newclientOperation(op Operation, numClients int, id int) clientOperation {
-	return clientOperation{Op: op, globalId: id, id: id, firstConc: nil, visited: false}
+	return clientOperation{Op: op, globalId: id, id: id, firstUnk: nil, visited: false}
 }
 
 type client struct {
@@ -26,23 +26,27 @@ type client struct {
 	nDeps  int               // number of unsatisfied dependencies for operation at head
 }
 
-func (ch *chains) computeFirstConc(c int, consistency Consistency) {
+func (ch *chains) computeFirstUnk(c int, consistency Consistency) {
 	if ch.clients[c].head >= len(ch.clients[c].cltOps) || ch.clients[c].cltOps[ch.clients[c].head].visited {
 		return
 	}
 	op := &ch.clients[c].cltOps[ch.clients[c].head]
 
-	// Binary search for the first client that does not have an outgoing dependency to this op
+	// For each other client d, find the first operation from d that does not
+	// have an outgoing HardBefore dependency to this op.
+	// Binary search works while operations return HardBefore or Concurrent.
+	// For DontKnow results we fall back to linear search from the first uncertain index.
 	for d := 0; d < len(ch.clients); d++ {
 		if c == d {
 			continue
 		}
-		firstConc := 0
+		firstUnk := 0
 		if ch.clients[c].head > 0 {
-			firstConc = ch.clients[c].cltOps[ch.clients[c].head-1].firstConc[d]
+			firstUnk = ch.clients[c].cltOps[ch.clients[c].head-1].firstUnk[d]
 		}
-		i := firstConc
+		i := firstUnk
 		step := 1
+		firstDontKnow := -1 // first index where we saw DontKnow during the exponential scan
 		for i < len(ch.clients[d].cltOps) {
 			order, err := consistency.Check(&ch.clients[d].cltOps[i], op)
 			if err != nil {
@@ -51,7 +55,14 @@ func (ch *chains) computeFirstConc(c int, consistency Consistency) {
 			if order == HardBefore {
 				i += step
 				step *= 2
+			} else if order == Concurrent {
+				// Concurrent: safe to set as upper bound (not HardBefore)
+				break
 			} else {
+				// DontKnow (or Soft*): record and stop exponential scan
+				if firstDontKnow < 0 {
+					firstDontKnow = i
+				}
 				break
 			}
 		}
@@ -60,9 +71,11 @@ func (ch *chains) computeFirstConc(c int, consistency Consistency) {
 			high = len(ch.clients[d].cltOps)
 		}
 		low := i - step/2
-		if low < firstConc {
-			low = firstConc
+		if low < firstUnk {
+			low = firstUnk
 		}
+		// Binary search phase: only safe when results are HardBefore or Concurrent.
+		// Track any DontKnow encountered so we can fall back to linear search.
 		for low < high {
 			mid := low + (high-low)/2
 			order, err := consistency.Check(&ch.clients[d].cltOps[mid], op)
@@ -71,11 +84,37 @@ func (ch *chains) computeFirstConc(c int, consistency Consistency) {
 			}
 			if order == HardBefore {
 				low = mid + 1
+			} else if order == Concurrent {
+				// Concurrent means not HardBefore, safe to discard right half.
+				high = mid
 			} else {
+				// DontKnow: record the earliest uncertain position and shrink right.
+				if firstDontKnow < 0 || mid < firstDontKnow {
+					firstDontKnow = mid
+				}
 				high = mid
 			}
 		}
-		op.firstConc[d] = low
+		// If any DontKnow was seen during binary search, fall back to linear
+		// search from the earliest uncertain index to confirm the boundary.
+		result := low
+		if firstDontKnow >= 0 && firstDontKnow < result {
+			result = firstDontKnow
+		}
+		if firstDontKnow >= 0 {
+			// Linear scan from firstDontKnow to confirm all are not HardBefore.
+			for j := firstDontKnow; j < len(ch.clients[d].cltOps); j++ {
+				order, err := consistency.Check(&ch.clients[d].cltOps[j], op)
+				if err != nil {
+					panic(err)
+				}
+				if order != HardBefore {
+					result = j
+					break
+				}
+			}
+		}
+		op.firstUnk[d] = result
 	}
 	op.visited = true
 }
@@ -99,7 +138,7 @@ func (ch *chains) addToFrontier(c int, consistency Consistency) {
 		if err != nil {
 			panic(err)
 		}
-		if order == SoftAfter || (order == Unconstrained && c > v) {
+		if order == SoftAfter || ((order == Concurrent || order == DontKnow) && c > v) {
 			ch.frontier = append(ch.frontier, 0)
 			copy(ch.frontier[i+1:], ch.frontier[i:])
 			ch.frontier[i] = c
@@ -142,21 +181,21 @@ func newChains(history operationHistory, consistency Consistency) chains {
 		n += len(c)
 	}
 
-	firstConcs := make([]int, n*numClients)
+	firstUnks := make([]int, n*numClients)
 	for i := 0; i < numClients; i++ {
 		for j := 0; j < len(clients[i].cltOps); j++ {
-			clients[i].cltOps[j].firstConc = firstConcs[clients[i].cltOps[j].id*numClients : (clients[i].cltOps[j].id+1)*numClients]
+			clients[i].cltOps[j].firstUnk = firstUnks[clients[i].cltOps[j].id*numClients : (clients[i].cltOps[j].id+1)*numClients]
 		}
 	}
 
 	ch := chains{clients: clients, numOps: n, frontier: make([]int, 0, numClients)}
 	for i := 0; i < numClients; i++ {
-		ch.computeFirstConc(i, consistency)
+		ch.computeFirstUnk(i, consistency)
 		ch.clients[i].nDeps = 0
 		if len(ch.clients[i].cltOps) > 0 {
 			op := ch.clients[i].cltOps[0]
 			for j := 0; j < numClients; j++ {
-				if j != i && op.firstConc[j] > 0 {
+				if j != i && op.firstUnk[j] > 0 {
 					ch.clients[i].nDeps++
 				}
 			}
@@ -232,7 +271,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 		newState, success := ch.clients[i].lift(model, consistency, oldState, cache, serialized)
 		if success {
 			*stack = append(*stack, e)
-			ch.computeFirstConc(i, consistency)
+			ch.computeFirstUnk(i, consistency)
 
 			ch.removeFromFrontier(i)
 
@@ -240,7 +279,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 				opI := ch.clients[i].cltOps[ch.clients[i].head]
 				ch.clients[i].nDeps = 0
 				for k := 0; k < len(ch.clients); k++ {
-					if k != i && opI.firstConc[k] > ch.clients[k].head {
+					if k != i && opI.firstUnk[k] > ch.clients[k].head {
 						ch.clients[i].nDeps++
 					}
 				}
@@ -251,7 +290,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 
 			for j := 0; j < len(ch.clients); j++ {
 				if j != i && ch.clients[j].head < len(ch.clients[j].cltOps) {
-					if ch.clients[j].cltOps[ch.clients[j].head].firstConc[i] == ch.clients[i].head {
+					if ch.clients[j].cltOps[ch.clients[j].head].firstUnk[i] == ch.clients[i].head {
 						ch.clients[j].nDeps--
 						if ch.clients[j].nDeps == 0 {
 							ch.addToFrontier(j, consistency)
@@ -279,7 +318,7 @@ func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset, consistency Co
 
 	for j := 0; j < len(ch.clients); j++ {
 		if j != clientId && ch.clients[j].head < len(ch.clients[j].cltOps) {
-			if ch.clients[j].cltOps[ch.clients[j].head].firstConc[clientId] == ch.clients[clientId].head+1 {
+			if ch.clients[j].cltOps[ch.clients[j].head].firstUnk[clientId] == ch.clients[clientId].head+1 {
 				if ch.clients[j].nDeps == 0 {
 					ch.removeFromFrontier(j)
 				}

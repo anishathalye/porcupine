@@ -315,10 +315,6 @@ func checkEvents(model Model, consistency Consistency, history []Event, verbose 
 		operationHistories = append(operationHistories, operationHistory)
 	}
 
-	for i := range operationHistories {
-		consistency.Preprocess(operationHistories[i])
-	}
-
 	return checkParallel(model, consistency, operationHistories, l, verbose, timeout)
 }
 
@@ -336,9 +332,6 @@ func checkOperations(model Model, consistency Consistency, history []Operation, 
 
 	for i, subhistory := range partitions {
 		l[i], operationHistories[i] = makeEntries(subhistory, maxClientId+1)
-	}
-	for i := range operationHistories {
-		consistency.Preprocess(operationHistories[i])
 	}
 	return checkParallel(model, consistency, operationHistories, l, verbose, timeout)
 }

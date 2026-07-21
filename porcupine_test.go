@@ -191,21 +191,19 @@ var etcdModel = Model{
 	},
 }
 
-var revisionOracle = Oracle{
-	Compare: func(a *Operation, b *Operation) (OrderKind, error) {
-		aHint, ok1 := a.OrderHint.(int)
-		bHint, ok2 := b.OrderHint.(int)
-		if !ok1 || !ok2 {
-			return Unconstrained, nil
-		}
-		if aHint < bHint {
-			return HardBefore, nil
-		}
-		if aHint > bHint {
-			return HardAfter, nil
-		}
-		return Unconstrained, nil
-	},
+var revisionOracle Oracle = func(a *Operation, b *Operation) (OrderKind, error) {
+	aHint, ok1 := a.OrderHint.(int)
+	bHint, ok2 := b.OrderHint.(int)
+	if !ok1 || !ok2 {
+		return DontKnow, nil
+	}
+	if aHint < bHint {
+		return HardBefore, nil
+	}
+	if aHint > bHint {
+		return HardAfter, nil
+	}
+	return DontKnow, nil
 }
 
 var etcdConsistency = Consistency{
