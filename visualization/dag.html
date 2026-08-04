@@ -1,12 +1,17 @@
+<!-- eslint-disable @html-eslint/indent, @html-eslint/require-closing-tags, @html-eslint/no-extra-spacing-tags, @html-eslint/attrs-newline, @html-eslint/sort-attrs, @html-eslint/head-order -->
 <!doctype html>
-<html>
+<html lang="en">
   <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content="Pine DAG visualization" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta property="og:title" content="Pine" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://example.com" />
+    <meta property="og:image" content="https://example.com/og.png" />
     <title>Pine</title>
-    <script
-      type="text/javascript"
-      src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
-    ></script>
-    <style type="text/css">
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
       body,
       html {
         margin: 0;
@@ -49,20 +54,26 @@
         width: 100%%;
         height: calc(100vh - 60px);
       }
+
+      #search-status {
+        margin-left: 10px;
+        color: #6c757d;
+        font-size: 14px;
+      }
     </style>
   </head>
 
   <body>
     <div id="search-container">
-      <input type="text" id="search-input" placeholder="Search operation description" />
-      <button onclick="searchNode(false)">Search</button>
-      <button onclick="searchNode(true)">Next</button>
-      <button onclick="resetSearch()">Reset</button>
-      <span id="search-status" style="margin-left: 10px; color: #6c757d; font-size: 14px"></span>
+      <input id="search-input" placeholder="Search operation description" type="text" />
+      <button type="submit" onclick="searchNode(false)">Search</button>
+      <button type="submit" onclick="searchNode(true)">Next</button>
+      <button type="submit" onclick="resetSearch()">Reset</button>
+      <span id="search-status"></span>
     </div>
     <div id="mynetwork"></div>
 
-    <script type="text/javascript">
+    <script>
       var nodesData = %s;
       var edgesData = %s;
 

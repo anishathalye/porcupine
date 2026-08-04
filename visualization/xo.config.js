@@ -6,6 +6,6 @@ const xoConfig = {
       document: 'readonly',
     },
   },
-}
+};
 
-export default xoConfig
+export default xoConfig;

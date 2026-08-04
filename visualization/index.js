@@ -1,18 +1,18 @@
-'use strict' // eslint-disable-line unicorn/prefer-module
+'use strict'; // eslint-disable-line unicorn/prefer-module
 
-const SVG_NS = 'http://www.w3.org/2000/svg'
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function svgnew(tag, attributes) {
-  const element = document.createElementNS(SVG_NS, tag)
-  svgattr(element, attributes)
-  return element
+  const element = document.createElementNS(SVG_NS, tag);
+  svgattr(element, attributes);
+  return element;
 }
 
 function svgattr(element, attributes) {
   if (attributes) {
     for (const k in attributes) {
       if (Object.hasOwn(attributes, k)) {
-        element.setAttributeNS(null, k, attributes[k])
+        element.setAttributeNS(null, k, attributes[k]);
       }
     }
   }
@@ -20,124 +20,124 @@ function svgattr(element, attributes) {
 
 function svgattach(parent, child) {
   // eslint-disable-next-line unicorn/prefer-dom-node-append
-  return parent.appendChild(child)
+  return parent.appendChild(child);
 }
 
 function svgadd(element, tag, attributes) {
-  return svgattach(element, svgnew(tag, attributes))
+  return svgattach(element, svgnew(tag, attributes));
 }
 
 function newArray(n, function_) {
-  const array = Array.from({length: n})
+  const array = Array.from({length: n});
   for (let i = 0; i < n; i++) {
-    array[i] = function_(i)
+    array[i] = function_(i);
   }
 
-  return array
+  return array;
 }
 
 function arrayEq(a, b) {
   if (a === b) {
-    return true
+    return true;
   }
 
   if (a === undefined || a === null || b === undefined || b === null) {
-    return false
+    return false;
   }
 
   if (a.length !== b.length) {
-    return false
+    return false;
   }
 
   for (const [i, element] of a.entries()) {
     if (element !== b[i]) {
-      return false
+      return false;
     }
   }
 
-  return true
+  return true;
 }
 
 function formatCallReturn(callTime, returnTime) {
-  return '<br><br>Call: ' + callTime + '<br><br>Return: ' + returnTime
+  return '<br><br>Call: ' + callTime + '<br><br>Return: ' + returnTime;
 }
 
 // eslint-disable-next-line no-unused-vars, complexity
 function render(data) {
-  const PADDING = 10
-  const BOX_HEIGHT = 30
-  const BOX_SPACE = 15
-  const EPSILON = 20
-  const LINE_BLEED = 5
-  const BOX_GAP = 20
-  const BOX_TEXT_PADDING = 10
-  const HISTORY_RECT_RADIUS = 4
+  const PADDING = 10;
+  const BOX_HEIGHT = 30;
+  const BOX_SPACE = 15;
+  const EPSILON = 20;
+  const LINE_BLEED = 5;
+  const BOX_GAP = 20;
+  const BOX_TEXT_PADDING = 10;
+  const HISTORY_RECT_RADIUS = 4;
 
-  const annotations = data.Annotations
-  const coreHistory = data.Partitions
+  const annotations = data.Annotations;
+  const coreHistory = data.Partitions;
   // For simplicity, make annotations look like more history
-  const allData = [...coreHistory, {History: annotations}]
+  const allData = [...coreHistory, {History: annotations}];
 
-  let maxClient = -1
+  let maxClient = -1;
   for (const partition of allData) {
     for (const element of partition.History) {
-      maxClient = Math.max(maxClient, element.ClientId)
+      maxClient = Math.max(maxClient, element.ClientId);
     }
   }
 
   // "real" clients, not including tags
-  const realClients = maxClient + 1
+  const realClients = maxClient + 1;
   // We treat each unique annotation tag as another "client"
-  const tags = new Set()
+  const tags = new Set();
   for (const annot of annotations) {
-    const tag = annot.Tag
+    const tag = annot.Tag;
     if (tag.length > 0) {
-      tags.add(tag)
+      tags.add(tag);
     }
   }
 
   // Add synthetic client numbers
-  const tag2ClientId = {}
-  const sortedTags = [...tags].toSorted()
+  const tag2ClientId = {};
+  const sortedTags = [...tags].toSorted((a, b) => a.localeCompare(b));
   for (const tag of sortedTags) {
-    maxClient += 1
-    tag2ClientId[tag] = maxClient
+    maxClient += 1;
+    tag2ClientId[tag] = maxClient;
   }
 
   for (const annot of annotations) {
-    const tag = annot.Tag
+    const tag = annot.Tag;
     if (tag.length > 0) {
-      annot.ClientId = tag2ClientId[tag]
+      annot.ClientId = tag2ClientId[tag];
     }
   }
 
   // Total number of clients now includes these synthetic clients
-  const nClient = maxClient + 1
+  const nClient = maxClient + 1;
 
   // Prepare some useful data to be used later:
   // - Add a GID to each event
   // - Create a mapping from GIDs back to events
   // - Create a set of all timestamps
   // - Create a set of all start timestamps
-  const allTimestamps = new Set()
-  const startTimestamps = new Set()
-  const endTimestamps = new Set()
-  let gid = 0
-  const byGid = {}
+  const allTimestamps = new Set();
+  const startTimestamps = new Set();
+  const endTimestamps = new Set();
+  let gid = 0;
+  const byGid = {};
   for (const partition of allData) {
     for (const element of partition.History) {
-      allTimestamps.add(element.Start)
-      startTimestamps.add(element.Start)
-      endTimestamps.add(element.End)
-      allTimestamps.add(element.End)
+      allTimestamps.add(element.Start);
+      startTimestamps.add(element.Start);
+      endTimestamps.add(element.End);
+      allTimestamps.add(element.End);
       // Give elements GIDs
-      element.Gid = gid
-      byGid[gid] = element
-      gid++
+      element.Gid = gid;
+      byGid[gid] = element;
+      gid++;
     }
   }
 
-  let sortedTimestamps = [...allTimestamps].toSorted((a, b) => a - b)
+  let sortedTimestamps = [...allTimestamps].toSorted((a, b) => a - b);
 
   // If one event has the same end time as another's start time, that means that
   // they are concurrent, and we need to display them with overlap. We do this
@@ -150,20 +150,20 @@ function render(data) {
   // operations are concurrent (see the comment in model.go for more details for
   // why it must be this way), and we can't display them with overlap on the
   // same row cleanly.
-  const epsilon = 16
+  const epsilon = 16;
   // Coordinated with computeVisualizationData, which uses an incrementing
   // counter multiplied by 100, so it's safe to adjust timestamps by += epsilon
   // without it overlapping with another adjusted timestamp (2*16 < 100)
   for (const [index, partition] of allData.entries()) {
     if (index === allData.length - 1) {
-      continue // Last partition is the annotations
+      continue; // Last partition is the annotations
     }
 
     for (const element of partition.History) {
-      const end = element.End
+      const end = element.End;
       if (startTimestamps.has(end)) {
-        element.End = end + epsilon
-        allTimestamps.add(element.End)
+        element.End = end + epsilon;
+        allTimestamps.add(element.End);
       }
     }
   }
@@ -191,24 +191,24 @@ function render(data) {
       // Point-in-time annotation: we adjust these to have a non-zero-duration;
       // we only need to edit the end timestamp, and we can leave the start
       // as-is
-      element.End += epsilon / 4
-      allTimestamps.add(element.End)
+      element.End += epsilon / 4;
+      allTimestamps.add(element.End);
     } else {
       // Annotation touching another event or annotation
       if (startTimestamps.has(element.End)) {
-        element.End -= epsilon / 2
-        allTimestamps.add(element.End)
+        element.End -= epsilon / 2;
+        allTimestamps.add(element.End);
       }
 
       if (endTimestamps.has(element.Start)) {
-        element.Start += epsilon / 2
-        allTimestamps.add(element.Start)
+        element.Start += epsilon / 2;
+        allTimestamps.add(element.Start);
       }
     }
   }
 
   // Update sortedTimestamps, because we created some new timestamps.
-  sortedTimestamps = [...allTimestamps].toSorted((a, b) => a - b)
+  sortedTimestamps = [...allTimestamps].toSorted((a, b) => a - b);
 
   // Compute layout.
   //
@@ -243,7 +243,7 @@ function render(data) {
   // So that is what we do here. We optimally solve the above, and while
   // doing so, also compute some useful information (e.g. x-positions of
   // linearization points) that is useful later.
-  const xPos = {}
+  const xPos = {};
   // Compute some information about history elements, sorted by end time;
   // the most important information here is box width.
   const byEnd = allData
@@ -251,77 +251,77 @@ function render(data) {
       partition.History.map((element) => {
         // Compute width of the text inside the history element by actually
         // drawing it (in a hidden div)
-        const scratch = document.querySelector('#calc')
-        scratch.innerHTML = ''
-        const svg = svgadd(scratch, 'svg')
+        const scratch = document.querySelector('#calc');
+        scratch.innerHTML = '';
+        const svg = svgadd(scratch, 'svg');
         const text = svgadd(svg, 'text', {
           'text-anchor': 'middle',
           class: 'history-text',
-        })
-        text.textContent = element.Description
-        const bbox = text.getBBox()
-        const width = bbox.width + 2 * BOX_TEXT_PADDING
+        });
+        text.textContent = element.Description;
+        const bbox = text.getBBox();
+        const width = bbox.width + 2 * BOX_TEXT_PADDING; // eslint-disable-line @stylistic/no-mixed-operators
         return {
           start: element.Start,
           end: element.End,
           width,
           gid: element.Gid,
-        }
-      })
+        };
+      }),
     )
-    .toSorted((a, b) => a.end - b.end)
+    .toSorted((a, b) => a.end - b.end);
   // Some preprocessing for linearization points and illegal next
   // linearizations. We need to figure out where exactly LPs end up
   // as we go, so we can make sure event boxes are wide enough.
-  const eventToLinearizations = newArray(gid, () => []) // Event -> [{index, position}]
-  const eventIllegalLast = newArray(gid, () => []) // Event -> [index]
-  const allLinearizations = []
-  let lgid = 0
+  const eventToLinearizations = newArray(gid, () => []); // Event -> [{index, position}]
+  const eventIllegalLast = newArray(gid, () => []); // Event -> [index]
+  const allLinearizations = [];
+  let lgid = 0;
   for (const partition of coreHistory) {
     for (const lin of partition.PartialLinearizations) {
-      const globalized = [] // Linearization with global indexes instead of partition-local ones
-      const included = new Set() // For figuring out illegal next LPs
+      const globalized = []; // Linearization with global indexes instead of partition-local ones
+      const included = new Set(); // For figuring out illegal next LPs
       for (const [position, id] of lin.entries()) {
-        included.add(id.Index)
-        const gid = partition.History[id.Index].Gid
-        globalized.push(gid)
-        eventToLinearizations[gid].push({index: lgid, position})
+        included.add(id.Index);
+        const elementGid = partition.History[id.Index].Gid;
+        globalized.push(elementGid);
+        eventToLinearizations[elementGid].push({index: lgid, position});
       }
 
-      allLinearizations.push(globalized)
-      let minEnd = Infinity
+      allLinearizations.push(globalized);
+      let minEnd = Infinity;
       for (const [index, element] of partition.History.entries()) {
         if (!included.has(index)) {
-          minEnd = Math.min(minEnd, element.End)
+          minEnd = Math.min(minEnd, element.End);
         }
       }
 
       for (const [index, element] of partition.History.entries()) {
         if (!included.has(index) && element.Start < minEnd) {
-          eventIllegalLast[element.Gid].push(lgid)
+          eventIllegalLast[element.Gid].push(lgid);
         }
       }
 
-      lgid++
+      lgid++;
     }
   }
 
-  const linearizationPositions = newArray(lgid, () => []) // [[xpos]]
+  const linearizationPositions = newArray(lgid, () => []); // [[xpos]]
   // Okay, now we're ready to do the left-to-right scan.
   // Solve timestamp -> xPos.
-  let eventIndex = 0
-  xPos[sortedTimestamps[0]] = 0 // Positions start at 0
+  let eventIndex = 0;
+  xPos[sortedTimestamps[0]] = 0; // Positions start at 0
   for (let i = 1; i < sortedTimestamps.length; i++) {
     // Left-to-right scan, finding minimum time we can use
-    const ts = sortedTimestamps[i]
+    const ts = sortedTimestamps[i];
     // Ensure some gap from last timestamp
-    let pos = xPos[sortedTimestamps[i - 1]] + BOX_GAP
+    let pos = xPos[sortedTimestamps[i - 1]] + BOX_GAP;
     // Ensure that text fits in boxes
     while (eventIndex < byEnd.length && byEnd[eventIndex].end <= ts) {
       // Push our position as far as necessary to accommodate text in box
-      const event_ = byEnd[eventIndex]
-      const textEndPos = xPos[event_.start] + event_.width
-      pos = Math.max(pos, textEndPos)
+      const event_ = byEnd[eventIndex];
+      const textEndPos = xPos[event_.start] + event_.width;
+      pos = Math.max(pos, textEndPos);
       // Ensure that LPs fit in box.
       //
       // When placing the end of an event, for all partial linearizations
@@ -330,120 +330,116 @@ function render(data) {
       // out the minimum width that the box needs to be to accommodate the LP.
       for (const li of [
         ...eventToLinearizations[event_.gid],
-        ...eventIllegalLast[event_.gid].map((index) => {
-          return {
-            index,
-            position: allLinearizations[index].length - 1,
-          }
-        }),
+        ...eventIllegalLast[event_.gid].map((index) => ({
+          index,
+          position: allLinearizations[index].length - 1,
+        })),
       ]) {
-        const {index, position} = li
-        for (let i = linearizationPositions[index].length; i <= position; i++) {
+        const {index, position} = li;
+        for (let j = linearizationPositions[index].length; j <= position; j++) {
           // Determine past points
-          let previous = null
-          // eslint-disable-next-line max-depth
-          if (linearizationPositions[index].length > 0) {
-            previous = linearizationPositions[index][i - 1]
-          }
 
-          const nextGid = allLinearizations[index][i]
+          const previous =
+            linearizationPositions[index].length > 0 ? linearizationPositions[index][j - 1] : null;
+
+          const nextGid = allLinearizations[index][j];
           const nextPos =
             previous === null
               ? xPos[byGid[nextGid].Start]
-              : Math.max(xPos[byGid[nextGid].Start], previous + EPSILON)
+              : Math.max(xPos[byGid[nextGid].Start], previous + EPSILON);
 
-          linearizationPositions[index].push(nextPos)
+          linearizationPositions[index].push(nextPos);
         }
 
         // This next line only really makes sense for the ones in
         // eventToLinearizations, not the ones from eventIllegalLast,
         // but it's safe to do it for all points, so we don't bother to
         // distinguish.
-        pos = Math.max(pos, linearizationPositions[index][position])
+        pos = Math.max(pos, linearizationPositions[index][position]);
       }
 
       // Ensure that illegal next LPs fit in box too
       for (const li of eventIllegalLast[event_.gid]) {
-        const lin = linearizationPositions[li]
-        const previous = lin.at(-1)
-        pos = Math.max(pos, previous + EPSILON)
+        const lin = linearizationPositions[li];
+        const previous = lin.at(-1);
+        pos = Math.max(pos, previous + EPSILON);
       }
 
-      eventIndex++
+      eventIndex++;
     }
 
-    xPos[ts] = pos
+    xPos[ts] = pos;
   }
 
   // Get maximum tag width
-  let maxTagWidth = 0
+  let maxTagWidth = 0;
   for (let i = 0; i < nClient; i++) {
-    const tag = i < realClients ? i.toString() : sortedTags[i - realClients]
-    const scratch = document.querySelector('#calc')
-    scratch.innerHTML = ''
-    const svg = svgadd(scratch, 'svg')
+    const tag = i < realClients ? i.toString() : sortedTags[i - realClients];
+    const scratch = document.querySelector('#calc');
+    scratch.innerHTML = '';
+    const svg = svgadd(scratch, 'svg');
     const text = svgadd(svg, 'text', {
       'text-anchor': 'end',
-    })
-    text.textContent = tag
-    const bbox = text.getBBox()
-    const width = bbox.width + 2 * BOX_TEXT_PADDING
+    });
+    text.textContent = tag;
+    const bbox = text.getBBox();
+    const width = bbox.width + 2 * BOX_TEXT_PADDING; // eslint-disable-line @stylistic/no-mixed-operators
     if (width > maxTagWidth) {
-      maxTagWidth = width
+      maxTagWidth = width;
     }
   }
 
-  const t0x = PADDING + maxTagWidth // X-pos of line at t=0
+  const t0x = PADDING + maxTagWidth; // X-pos of line at t=0
 
   // Solved, now draw UI.
 
-  let selected = false
-  let selectedIndex = [-1, -1]
+  let selected = false;
+  let selectedIndex = [-1, -1];
 
   // Build per-partition lookup: clientOpsByPartition[p][clientId] = sorted list of historyElements
   // Only for core (non-annotation) partitions
   const clientOpsByPartition = coreHistory.map((partition) => {
-    const byClient = {}
+    const byClient = {};
     for (const element of partition.History) {
       if (!Object.hasOwn(byClient, element.ClientId)) {
-        byClient[element.ClientId] = []
+        byClient[element.ClientId] = [];
       }
 
-      byClient[element.ClientId].push(element)
+      byClient[element.ClientId].push(element);
     }
 
     // Sort each client's ops by Start time so index in array == op index
-    for (const clientId of Object.keys(byClient)) {
-      byClient[clientId].sort((a, b) => a.Start - b.Start)
+    for (const value of Object.values(byClient)) {
+      value.sort((a, b) => a.Start - b.Start);
     }
 
-    return byClient
-  })
+    return byClient;
+  });
 
-  const height = 2 * PADDING + BOX_HEIGHT * nClient + BOX_SPACE * (nClient - 1)
-  const width = 2 * PADDING + maxTagWidth + xPos[sortedTimestamps.at(-1)]
+  const height = 2 * PADDING + BOX_HEIGHT * nClient + BOX_SPACE * (nClient - 1); // eslint-disable-line @stylistic/no-mixed-operators
+  const width = 2 * PADDING + maxTagWidth + xPos[sortedTimestamps.at(-1)]; // eslint-disable-line @stylistic/no-mixed-operators
   const svg = svgadd(document.querySelector('#canvas'), 'svg', {
     width,
     height,
-  })
+  });
 
   // Draw background, etc.
-  const bg = svgadd(svg, 'g')
+  const bg = svgadd(svg, 'g');
   const bgRect = svgadd(bg, 'rect', {
     height,
     width,
     x: 0,
     y: 0,
     class: 'bg',
-  })
-  bgRect.addEventListener('click', handleBgClick)
+  });
+  bgRect.addEventListener('click', handleBgClick);
   for (let i = 0; i < nClient; i++) {
     const text = svgadd(bg, 'text', {
       x: PADDING + maxTagWidth - BOX_TEXT_PADDING,
-      y: PADDING + BOX_HEIGHT / 2 + i * (BOX_HEIGHT + BOX_SPACE),
+      y: PADDING + BOX_HEIGHT / 2 + i * (BOX_HEIGHT + BOX_SPACE), // eslint-disable-line @stylistic/no-mixed-operators
       'text-anchor': 'end',
-    })
-    text.textContent = i < realClients ? i : sortedTags[i - realClients]
+    });
+    text.textContent = i < realClients ? i : sortedTags[i - realClients];
   }
 
   // Vertical line at t=0
@@ -453,38 +449,38 @@ function render(data) {
     x2: t0x,
     y2: height - PADDING,
     class: 'divider',
-  })
+  });
   // Horizontal line dividing clients from annotation tags, but only if there are tags
   if (tags.size > 0) {
-    const annotationLineY = PADDING + realClients * (BOX_HEIGHT + BOX_SPACE) - BOX_SPACE / 2
+    const annotationLineY = PADDING + realClients * (BOX_HEIGHT + BOX_SPACE) - BOX_SPACE / 2; // eslint-disable-line @stylistic/no-mixed-operators
     svgadd(bg, 'line', {
       x1: PADDING,
       y1: annotationLineY,
       x2: t0x,
       y2: annotationLineY,
       class: 'divider',
-    })
+    });
   }
 
   // Draw history
-  const historyLayers = []
-  const historyRects = []
-  const targetRects = svgnew('g')
+  const historyLayers = [];
+  const historyRects = [];
+  const targetRects = svgnew('g');
   for (const [partitionIndex, partition] of allData.entries()) {
-    const l = svgadd(svg, 'g')
-    historyLayers.push(l)
-    const rects = []
+    const l = svgadd(svg, 'g');
+    historyLayers.push(l);
+    const rects = [];
     for (const [elementIndex, element] of partition.History.entries()) {
-      const g = svgadd(l, 'g')
-      const rx = xPos[element.Start]
-      const width = xPos[element.End] - rx
-      const x = rx + t0x
-      const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE)
-      const rectClass = element.Annotation ? 'client-annotation-rect' : 'history-rect'
+      const g = svgadd(l, 'g');
+      const rx = xPos[element.Start];
+      const elementWidth = xPos[element.End] - rx;
+      const x = rx + t0x;
+      const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE); // eslint-disable-line @stylistic/no-mixed-operators
+      const rectClass = element.Annotation ? 'client-annotation-rect' : 'history-rect';
       rects.push(
         svgadd(g, 'rect', {
           height: BOX_HEIGHT,
-          width,
+          width: elementWidth,
           x,
           y,
           rx: HISTORY_RECT_RADIUS,
@@ -494,66 +490,62 @@ function render(data) {
             element.Annotation && element.BackgroundColor.length > 0
               ? `fill: ${element.BackgroundColor};`
               : '',
-        })
-      )
+        }),
+      );
       const text = svgadd(g, 'text', {
-        x: x + width / 2,
-        y: y + BOX_HEIGHT / 2,
+        x: x + elementWidth / 2, // eslint-disable-line @stylistic/no-mixed-operators
+        y: y + BOX_HEIGHT / 2, // eslint-disable-line @stylistic/no-mixed-operators
         'text-anchor': 'middle',
         class: 'history-text',
         style:
           element.Annotation && element.TextColor.length > 0 ? `fill: ${element.TextColor};` : '',
-      })
-      text.textContent = element.Description
+      });
+      text.textContent = element.Description;
       // We don't add mouseTarget to g, but to targetRects, because we
       // want to layer this on top of everything at the end; otherwise, the
       // LPs and lines will be over the target, which will create holes
       // where hover etc. won't work
       const mouseTarget = svgadd(targetRects, 'rect', {
         height: BOX_HEIGHT,
-        width,
+        width: elementWidth,
         x,
         y,
         class: 'target-rect',
         'data-partition': partitionIndex,
         'data-index': elementIndex,
-      })
-      mouseTarget.addEventListener('mouseover', handleMouseOver)
-      mouseTarget.addEventListener('mousemove', handleMouseMove)
-      mouseTarget.addEventListener('mouseout', handleMouseOut)
-      mouseTarget.addEventListener('click', handleClick)
+      });
+      mouseTarget.addEventListener('mouseover', handleMouseOver);
+      mouseTarget.addEventListener('mousemove', handleMouseMove);
+      mouseTarget.addEventListener('mouseout', handleMouseOut);
+      mouseTarget.addEventListener('click', handleClick);
     }
 
-    historyRects.push(rects)
+    historyRects.push(rects);
   }
 
   // Draw partial linearizations
-  const illegalLast = coreHistory.map((partition) => {
-    return partition.PartialLinearizations.map(() => new Set())
-  })
-  const largestIllegal = coreHistory.map(() => {
-    return {}
-  })
-  const largestIllegalLength = coreHistory.map(() => {
-    return {}
-  })
-  const partialLayers = []
-  const errorPoints = []
+  const illegalLast = coreHistory.map((partition) =>
+    partition.PartialLinearizations.map(() => new Set()),
+  );
+  const largestIllegal = coreHistory.map(() => ({}));
+  const largestIllegalLength = coreHistory.map(() => ({}));
+  const partialLayers = [];
+  const errorPoints = [];
   for (const [partitionIndex, partition] of coreHistory.entries()) {
-    const l = []
-    partialLayers.push(l)
+    const l = [];
+    partialLayers.push(l);
     for (const [linIndex, lin] of partition.PartialLinearizations.entries()) {
-      const g = svgadd(svg, 'g')
-      l.push(g)
-      let previousX = null
-      let previousY = null
-      let previousElement = null
-      const included = new Set()
+      const g = svgadd(svg, 'g');
+      l.push(g);
+      let previousX = null;
+      let previousY = null;
+      let previousElement = null;
+      const included = new Set();
       for (const id of lin) {
-        const element = partition.History[id.Index]
-        const hereX = t0x + xPos[element.Start]
-        const x = previousX === null ? hereX : Math.max(hereX, previousX + EPSILON)
-        const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
+        const element = partition.History[id.Index];
+        const hereX = t0x + xPos[element.Start];
+        const x = previousX === null ? hereX : Math.max(hereX, previousX + EPSILON);
+        const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED; // eslint-disable-line @stylistic/no-mixed-operators
         // Line from previous
         if (previousElement !== null) {
           svgadd(g, 'line', {
@@ -562,10 +554,10 @@ function render(data) {
             y1:
               previousElement.ClientId >= element.ClientId
                 ? previousY
-                : previousY + BOX_HEIGHT + 2 * LINE_BLEED,
-            y2: previousElement.ClientId <= element.ClientId ? y : y + BOX_HEIGHT + 2 * LINE_BLEED,
+                : previousY + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
+            y2: previousElement.ClientId <= element.ClientId ? y : y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
             class: 'linearization linearization-line',
-          })
+          });
         }
 
         // Current line
@@ -573,31 +565,31 @@ function render(data) {
           x1: x,
           x2: x,
           y1: y,
-          y2: y + BOX_HEIGHT + 2 * LINE_BLEED,
+          y2: y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
           class: 'linearization linearization-point',
-        })
-        previousX = x
-        previousY = y
-        previousElement = element
-        included.add(id.Index)
+        });
+        previousX = x;
+        previousY = y;
+        previousElement = element;
+        included.add(id.Index);
       }
 
       // Show possible but illegal next linearizations
       // a history element is a possible next try
       // if no other history element must be linearized earlier
       // i.e. forall others, this.start < other.end
-      let minEnd = Infinity
+      let minEnd = Infinity;
       for (const [index, element] of partition.History.entries()) {
         if (!included.has(index)) {
-          minEnd = Math.min(minEnd, element.End)
+          minEnd = Math.min(minEnd, element.End);
         }
       }
 
       for (const [index, element] of partition.History.entries()) {
         if (!included.has(index) && element.Start < minEnd) {
-          const hereX = t0x + xPos[element.Start]
-          const x = previousX === null ? hereX : Math.max(hereX, previousX + EPSILON)
-          const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
+          const hereX = t0x + xPos[element.Start];
+          const x = previousX === null ? hereX : Math.max(hereX, previousX + EPSILON);
+          const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED; // eslint-disable-line @stylistic/no-mixed-operators
           // Line from previous
           svgadd(g, 'line', {
             x1: previousX,
@@ -605,58 +597,60 @@ function render(data) {
             y1:
               previousElement.ClientId >= element.ClientId
                 ? previousY
-                : previousY + BOX_HEIGHT + 2 * LINE_BLEED,
-            y2: previousElement.ClientId <= element.ClientId ? y : y + BOX_HEIGHT + 2 * LINE_BLEED,
+                : previousY + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
+            y2: previousElement.ClientId <= element.ClientId ? y : y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
             class: 'linearization-invalid linearization-line',
-          })
+          });
           // Current line
           const point = svgadd(g, 'line', {
             x1: x,
             x2: x,
             y1: y,
-            y2: y + BOX_HEIGHT + 2 * LINE_BLEED,
+            y2: y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
             class: 'linearization-invalid linearization-point',
-          })
+          });
           errorPoints.push({
             x,
             partition: partitionIndex,
             index: lin.at(-1).Index, // NOTE not index
             element: point,
-          })
-          illegalLast[partitionIndex][linIndex].add(index)
+          });
+          illegalLast[partitionIndex][linIndex].add(index);
           // eslint-disable-next-line max-depth
           if (
             !Object.hasOwn(largestIllegalLength[partitionIndex], index) ||
             largestIllegalLength[partitionIndex][index] < lin.length
           ) {
-            largestIllegalLength[partitionIndex][index] = lin.length
-            largestIllegal[partitionIndex][index] = linIndex
+            largestIllegalLength[partitionIndex][index] = lin.length;
+            largestIllegal[partitionIndex][index] = linIndex;
           }
         }
       }
     }
   }
 
-  errorPoints.sort((a, b) => a.x - b.x)
+  errorPoints.sort((a, b) => a.x - b.x);
 
   // Attach targetRects
-  svgattach(svg, targetRects)
+  svgattach(svg, targetRects);
 
   // Dependency arrow overlay (drawn on top of everything)
-  const depArrowGroup = svgadd(svg, 'g', {class: 'dep-arrows'})
+  const depArrowGroup = svgadd(svg, 'g', {class: 'dep-arrows'});
 
   // Tooltip
   // eslint-disable-next-line unicorn/prefer-dom-node-append
-  const tooltip = document.querySelector('#canvas').appendChild(document.createElement('div'))
-  tooltip.setAttribute('class', 'tooltip')
+  const tooltip = document.querySelector('#canvas').appendChild(document.createElement('div'));
+  tooltip.setAttribute('class', 'tooltip');
 
   function handleMouseOver() {
-    if (!selected) {
-      const partition = Number.parseInt(this.dataset.partition, 10)
-      const index = Number.parseInt(this.dataset.index, 10)
-      highlight(partition, index)
-      tooltip.style.display = 'block'
+    if (selected) {
+      return;
     }
+
+    const partition = Number(this.dataset.partition);
+    const index = Number(this.dataset.index);
+    highlight(partition, index);
+    tooltip.style.display = 'block';
   }
 
   // Draw dependency lines for the selected element.
@@ -664,188 +658,200 @@ function render(data) {
   // plus a vertical tick at each source operation (LP-point style).
   function drawDepArrows(partition, index) {
     // Clear existing
-    while (depArrowGroup.firstChild) {
-      depArrowGroup.firstChild.remove()
+    depArrowGroup.replaceChildren();
+
+    if (partition >= coreHistory.length) {
+      return;
     }
 
-    if (partition >= coreHistory.length) return
+    const element = coreHistory[partition].History[index];
+    if (!element.StartDeps) {
+      return;
+    }
 
-    const element = coreHistory[partition].History[index]
-    if (!element.StartDeps) return
-
-    const clientOpsMap = clientOpsByPartition[partition]
+    const clientOpsMap = clientOpsByPartition[partition];
 
     // Target LP position — same formula as LP rendering
-    const targetX = t0x + xPos[element.Start]
-    const targetY = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
+    const targetX = t0x + xPos[element.Start];
+    const targetY = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED; // eslint-disable-line @stylistic/no-mixed-operators
 
     for (let c = 0; c < element.StartDeps.length; c++) {
-      if (c === element.ClientId) continue // Skip self
-      const depIdx = element.StartDeps[c] - 1 // Last op from client c that must precede this
-      if (depIdx < 0) continue // No dependency on this client
-      if (!Object.hasOwn(clientOpsMap, c)) continue
-      const srcOps = clientOpsMap[c]
-      if (depIdx >= srcOps.length) continue
-      const srcElement = srcOps[depIdx]
+      if (c === element.ClientId) {
+        continue;
+      } // Skip self
 
-      const srcX = t0x + xPos[srcElement.Start]
-      const srcY = PADDING + srcElement.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
+      const depIdx = element.StartDeps[c] - 1; // Last op from client c that must precede this
+      if (depIdx < 0) {
+        continue;
+      } // No dependency on this client
+
+      if (!Object.hasOwn(clientOpsMap, c)) {
+        continue;
+      }
+
+      const srcOps = clientOpsMap[c];
+      if (depIdx >= srcOps.length) {
+        continue;
+      }
+
+      const srcElement = srcOps[depIdx];
+
+      const srcX = t0x + xPos[srcElement.Start];
+      const srcY = PADDING + srcElement.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED; // eslint-disable-line @stylistic/no-mixed-operators
 
       // Connecting line (same y-edge logic as LP lines)
       svgadd(depArrowGroup, 'line', {
         x1: srcX,
         x2: targetX,
-        y1: srcElement.ClientId >= element.ClientId ? srcY : srcY + BOX_HEIGHT + 2 * LINE_BLEED,
+        y1: srcElement.ClientId >= element.ClientId ? srcY : srcY + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
         y2:
-          srcElement.ClientId <= element.ClientId ? targetY : targetY + BOX_HEIGHT + 2 * LINE_BLEED,
+          srcElement.ClientId <= element.ClientId ? targetY : targetY + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
         class: 'dep-constraint dep-constraint-line',
-      })
+      });
 
       // Vertical tick at source op
       svgadd(depArrowGroup, 'line', {
         x1: srcX,
         x2: srcX,
         y1: srcY,
-        y2: srcY + BOX_HEIGHT + 2 * LINE_BLEED,
+        y2: srcY + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
         class: 'dep-constraint dep-constraint-point',
-      })
+      });
     }
   }
 
   function clearDepArrows() {
-    while (depArrowGroup.firstChild) {
-      depArrowGroup.firstChild.remove()
-    }
+    depArrowGroup.replaceChildren();
   }
 
   function linearizationIndex(partition, index) {
     // Show this linearization
     if (partition >= coreHistory.length) {
       // Annotation
-      return null
+      return null;
     }
 
     if (Object.hasOwn(coreHistory[partition].Largest, index)) {
-      return coreHistory[partition].Largest[index]
+      return coreHistory[partition].Largest[index];
     }
 
     if (Object.hasOwn(largestIllegal[partition], index)) {
-      return largestIllegal[partition][index]
+      return largestIllegal[partition][index];
     }
 
-    return null
+    return null;
   }
 
   function highlight(partition, index) {
     // Hide all but this partition
     for (const [i, layer] of historyLayers.entries()) {
-      layer.classList.toggle('hidden', !(i === partition))
+      layer.classList.toggle('hidden', i !== partition);
     }
 
     // Hide all but the relevant linearization
     for (const layer of partialLayers) {
       for (const g of layer) {
-        g.classList.add('hidden')
+        g.classList.add('hidden');
       }
     }
 
     // Show this linearization
-    const maxIndex = linearizationIndex(partition, index)
+    const maxIndex = linearizationIndex(partition, index);
     if (maxIndex !== null) {
-      partialLayers[partition][maxIndex].classList.remove('hidden')
+      partialLayers[partition][maxIndex].classList.remove('hidden');
     }
 
-    updateJump()
+    updateJump();
   }
 
-  let lastTooltip = [null, null, null, null, null]
+  let lastTooltip = [null, null, null, null, null];
   function handleMouseMove(event_) {
     // Keep tooltip static if selected
     if (selected) {
-      return
+      return;
     }
 
-    const partition = Number.parseInt(this.dataset.partition, 10)
-    const index = Number.parseInt(this.dataset.index, 10)
-    const [sPartition, sIndex] = selectedIndex
-    const thisTooltip = [partition, index, selected, sPartition, sIndex]
+    const partition = Number(this.dataset.partition);
+    const index = Number(this.dataset.index);
+    const [sPartition, sIndex] = selectedIndex;
+    const thisTooltip = [partition, index, selected, sPartition, sIndex];
 
     if (!arrayEq(lastTooltip, thisTooltip)) {
       // If selected, show info relevant to the selected linearization
       const maxIndex = selected
         ? linearizationIndex(sPartition, sIndex)
-        : linearizationIndex(partition, index)
+        : linearizationIndex(partition, index);
 
-      const callTime = allData[partition].History[index].OriginalStart
-      const returnTime = allData[partition].History[index].OriginalEnd
+      const callTime = allData[partition].History[index].OriginalStart;
+      const returnTime = allData[partition].History[index].OriginalEnd;
 
-      let metadata = ''
+      let metadata = '';
       if (partition < coreHistory.length) {
-        const m = allData[partition].History[index].Metadata
+        const m = allData[partition].History[index].Metadata;
         if (m !== '') {
-          metadata = m + '<br><br>'
+          metadata = m + '<br><br>';
         }
       }
 
       if (partition >= coreHistory.length) {
         // Annotation
-        const details = annotations[index].Details
-        tooltip.innerHTML = details.length === 0 ? '&langle;no details&rangle;' : details
+        const details = annotations[index].Details;
+        tooltip.innerHTML = details.length === 0 ? '&langle;no details&rangle;' : details;
       } else if (selected && sPartition !== partition) {
         tooltip.innerHTML =
-          metadata + 'Not part of selected partition.' + formatCallReturn(callTime, returnTime)
+          metadata + 'Not part of selected partition.' + formatCallReturn(callTime, returnTime);
       } else if (maxIndex === null) {
         tooltip.innerHTML =
           metadata +
           (selected
             ? 'Selected element is not part of any partial linearization.'
             : 'Not part of any partial linearization.') +
-          formatCallReturn(callTime, returnTime)
+          formatCallReturn(callTime, returnTime);
       } else {
-        const lin = coreHistory[partition].PartialLinearizations[maxIndex]
-        let previous = null
-        let current = null
-        let found = false
+        const lin = coreHistory[partition].PartialLinearizations[maxIndex];
+        let previous = null;
+        let current = null;
+        let found = false;
         for (const element of lin) {
-          previous = current
-          current = element
+          previous = current;
+          current = element;
           if (current.Index === index) {
-            found = true
-            break
+            found = true;
+            break;
           }
         }
 
-        let message = metadata
+        let message = metadata;
 
         if (found) {
           // Part of linearization
           if (previous !== null) {
             message +=
-              '<strong>Previous state:</strong><br>' + previous.StateDescription + '<br><br>'
+              '<strong>Previous state:</strong><br>' + previous.StateDescription + '<br><br>';
           }
 
           message +=
             '<strong>New state:</strong><br>' +
             current.StateDescription +
-            formatCallReturn(callTime, returnTime)
+            formatCallReturn(callTime, returnTime);
         } else if (illegalLast[partition][maxIndex].has(index)) {
           // Illegal next one
           message +=
             '<strong>Previous state:</strong><br>' +
             lin.at(-1).StateDescription +
             '<br><br><strong>New state:</strong><br>&langle;invalid op&rangle;' +
-            formatCallReturn(callTime, returnTime)
+            formatCallReturn(callTime, returnTime);
         } else {
           // Not part of this one
           message +=
             "Not part of selected element's partial linearization." +
-            formatCallReturn(callTime, returnTime)
+            formatCallReturn(callTime, returnTime);
         }
 
-        tooltip.innerHTML = message
+        tooltip.innerHTML = message;
       }
 
-      lastTooltip = thisTooltip
+      lastTooltip = thisTooltip;
     }
 
     // Make sure tooltip doesn't overflow off the right side of the screen
@@ -853,118 +859,120 @@ function render(data) {
       document.documentElement.scrollLeft +
       document.documentElement.clientWidth -
       PADDING -
-      tooltip.getBoundingClientRect().width
-    tooltip.style.left = Math.min(event_.pageX + 20, maxX) + 'px'
-    tooltip.style.top = event_.pageY + 20 + 'px'
+      tooltip.getBoundingClientRect().width;
+    tooltip.style.left = Math.min(event_.pageX + 20, maxX) + 'px';
+    tooltip.style.top = event_.pageY + 20 + 'px';
   }
 
   function handleMouseOut() {
-    if (!selected) {
-      resetHighlight()
-      tooltip.style.display = 'none'
-      lastTooltip = [null, null, null, null, null]
+    if (selected) {
+      return;
     }
+
+    resetHighlight();
+    tooltip.style.display = 'none';
+    lastTooltip = [null, null, null, null, null];
   }
 
   function resetHighlight() {
     // Show all layers
     for (const layer of historyLayers) {
-      layer.classList.remove('hidden')
+      layer.classList.remove('hidden');
     }
 
     // Show longest linearizations, which are first
     for (const layers of partialLayers) {
       for (const [i, l] of layers.entries()) {
-        l.classList.toggle('hidden', !(i === 0))
+        l.classList.toggle('hidden', i !== 0);
       }
     }
 
-    updateJump()
+    updateJump();
   }
 
   // Store jump click handler so we can remove it before adding a new one
-  let jumpClickHandler = null
+  let jumpClickHandler = null;
 
   function updateJump() {
-    const jump = document.querySelector('#jump-link')
+    const jump = document.querySelector('#jump-link');
     // Find first non-hidden point
     // feels a little hacky, but it works
-    const point = errorPoints.find((pt) => !pt.element.parentElement.classList.contains('hidden'))
+    const point = errorPoints.find((pt) => !pt.element.parentElement.classList.contains('hidden'));
 
     // Remove any existing event listener
     if (jumpClickHandler) {
-      jump.removeEventListener('click', jumpClickHandler)
-      jumpClickHandler = null
+      jump.removeEventListener('click', jumpClickHandler);
+      jumpClickHandler = null;
     }
 
     if (point) {
-      jump.classList.remove('inactive')
+      jump.classList.remove('inactive');
       jumpClickHandler = () => {
-        point.element.scrollIntoView({behavior: 'smooth', inline: 'center', block: 'center'})
+        point.element.scrollIntoView({behavior: 'smooth', inline: 'center', block: 'center'});
         if (!selected) {
-          select(point.partition, point.index)
+          select(point.partition, point.index);
         }
-      }
+      };
 
-      jump.addEventListener('click', jumpClickHandler)
+      jump.addEventListener('click', jumpClickHandler);
     } else {
-      jump.classList.add('inactive')
+      jump.classList.add('inactive');
     }
   }
 
   function handleClick(event_) {
-    const partition = Number.parseInt(this.dataset.partition, 10)
-    const index = Number.parseInt(this.dataset.index, 10)
+    const partition = Number(this.dataset.partition);
+    const index = Number(this.dataset.index);
     if (selected) {
-      const [sPartition, sIndex] = selectedIndex
+      const [sPartition, sIndex] = selectedIndex;
       if (partition === sPartition && index === sIndex) {
-        deselect()
+        deselect();
         // Note: we're still displaying the tooltip, but once the user's mouse moves, it'll get updated
-        return
+        return;
       }
 
-      historyRects[sPartition][sIndex].classList.remove('selected')
+      historyRects[sPartition][sIndex].classList.remove('selected');
     }
 
-    select(partition, index)
+    select(partition, index);
 
-    tooltip.style.display = 'block'
+    tooltip.style.display = 'block';
     // Set static tooltip position when selecting
     const maxX =
       document.documentElement.scrollLeft +
       document.documentElement.clientWidth -
       PADDING -
-      tooltip.getBoundingClientRect().width
-    tooltip.style.left = Math.min(event_.pageX + 20, maxX) + 'px'
-    tooltip.style.top = event_.pageY + 20 + 'px'
+      tooltip.getBoundingClientRect().width;
+    tooltip.style.left = Math.min(event_.pageX + 20, maxX) + 'px';
+    tooltip.style.top = event_.pageY + 20 + 'px';
   }
 
   function handleBgClick() {
-    deselect()
-    clearDepArrows()
-    tooltip.style.display = 'none'
-    lastTooltip = [null, null, null, null, null]
+    deselect();
+    clearDepArrows();
+    tooltip.style.display = 'none';
+    lastTooltip = [null, null, null, null, null];
   }
 
   function select(partition, index) {
-    selected = true
-    selectedIndex = [partition, index]
-    highlight(partition, index)
-    historyRects[partition][index].classList.add('selected')
-    drawDepArrows(partition, index)
+    selected = true;
+    selectedIndex = [partition, index];
+    highlight(partition, index);
+    historyRects[partition][index].classList.add('selected');
+    drawDepArrows(partition, index);
   }
 
   function deselect() {
     if (!selected) {
-      return
+      return;
     }
 
-    selected = false
-    resetHighlight()
-    const [partition, index] = selectedIndex
-    historyRects[partition][index].classList.remove('selected')
-    clearDepArrows()
+    selected = false;
+    resetHighlight();
+    const [partition, index] = selectedIndex;
+    historyRects[partition][index].classList.remove('selected');
+    clearDepArrows();
   }
 
-  handleMouseOut() // Initialize, same as mouse out
+  handleMouseOut(); // Initialize, same as mouse out
 }
