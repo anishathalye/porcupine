@@ -81,6 +81,10 @@ registerModel := porcupine.Model{
             return readCorrectValue, state // state is unchanged
         }
     },
+    // computes a hash for a state (optional field, improves performance)
+    Hash: func(state interface{}) uint64 {
+        return uint64(state.(int))
+    },
 }
 ```
 
