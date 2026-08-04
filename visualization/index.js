@@ -252,7 +252,7 @@ function render(data) {
         // Compute width of the text inside the history element by actually
         // drawing it (in a hidden div)
         const scratch = document.querySelector('#calc');
-        scratch.innerHTML = '';
+        scratch.replaceChildren();
         const svg = svgadd(scratch, 'svg');
         const text = svgadd(svg, 'text', {
           'text-anchor': 'middle',
@@ -376,7 +376,7 @@ function render(data) {
   for (let i = 0; i < nClient; i++) {
     const tag = i < realClients ? i.toString() : sortedTags[i - realClients];
     const scratch = document.querySelector('#calc');
-    scratch.innerHTML = '';
+    scratch.replaceChildren();
     const svg = svgadd(scratch, 'svg');
     const text = svgadd(svg, 'text', {
       'text-anchor': 'end',
@@ -393,7 +393,7 @@ function render(data) {
 
   // Solved, now draw UI.
 
-  let selected = false;
+  let isSelected = false;
   let selectedIndex = [-1, -1];
 
   // Build per-partition lookup: clientOpsByPartition[p][clientId] = sorted list of historyElements
@@ -586,44 +586,46 @@ function render(data) {
       }
 
       for (const [index, element] of partition.History.entries()) {
-        if (!included.has(index) && element.Start < minEnd) {
-          const hereX = t0x + xPos[element.Start];
-          const x = previousX === null ? hereX : Math.max(hereX, previousX + EPSILON);
-          const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED; // eslint-disable-line @stylistic/no-mixed-operators
-          // Line from previous
-          svgadd(g, 'line', {
-            x1: previousX,
-            x2: x,
-            y1:
-              previousElement.ClientId >= element.ClientId
-                ? previousY
-                : previousY + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
-            y2: previousElement.ClientId <= element.ClientId ? y : y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
-            class: 'linearization-invalid linearization-line',
-          });
-          // Current line
-          const point = svgadd(g, 'line', {
-            x1: x,
-            x2: x,
-            y1: y,
-            y2: y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
-            class: 'linearization-invalid linearization-point',
-          });
-          errorPoints.push({
-            x,
-            partition: partitionIndex,
-            index: lin.at(-1).Index, // NOTE not index
-            element: point,
-          });
-          illegalLast[partitionIndex][linIndex].add(index);
-          // eslint-disable-next-line max-depth
-          if (
-            !Object.hasOwn(largestIllegalLength[partitionIndex], index) ||
-            largestIllegalLength[partitionIndex][index] < lin.length
-          ) {
-            largestIllegalLength[partitionIndex][index] = lin.length;
-            largestIllegal[partitionIndex][index] = linIndex;
-          }
+        if (included.has(index) || element.Start >= minEnd) {
+          continue;
+        }
+
+        const hereX = t0x + xPos[element.Start];
+        const x = previousX === null ? hereX : Math.max(hereX, previousX + EPSILON);
+        const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED; // eslint-disable-line @stylistic/no-mixed-operators
+        // Line from previous
+        svgadd(g, 'line', {
+          x1: previousX,
+          x2: x,
+          y1:
+            previousElement.ClientId >= element.ClientId
+              ? previousY
+              : previousY + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
+          y2: previousElement.ClientId <= element.ClientId ? y : y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
+          class: 'linearization-invalid linearization-line',
+        });
+        // Current line
+        const point = svgadd(g, 'line', {
+          x1: x,
+          x2: x,
+          y1: y,
+          y2: y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
+          class: 'linearization-invalid linearization-point',
+        });
+        errorPoints.push({
+          x,
+          partition: partitionIndex,
+          index: lin.at(-1).Index, // NOTE not index
+          element: point,
+        });
+        illegalLast[partitionIndex][linIndex].add(index);
+        // eslint-disable-next-line max-depth
+        if (
+          !Object.hasOwn(largestIllegalLength[partitionIndex], index) ||
+          largestIllegalLength[partitionIndex][index] < lin.length
+        ) {
+          largestIllegalLength[partitionIndex][index] = lin.length;
+          largestIllegal[partitionIndex][index] = linIndex;
         }
       }
     }
@@ -643,7 +645,7 @@ function render(data) {
   tooltip.setAttribute('class', 'tooltip');
 
   function handleMouseOver() {
-    if (selected) {
+    if (isSelected) {
       return;
     }
 
@@ -767,18 +769,18 @@ function render(data) {
   let lastTooltip = [null, null, null, null, null];
   function handleMouseMove(event_) {
     // Keep tooltip static if selected
-    if (selected) {
+    if (isSelected) {
       return;
     }
 
     const partition = Number(this.dataset.partition);
     const index = Number(this.dataset.index);
     const [sPartition, sIndex] = selectedIndex;
-    const thisTooltip = [partition, index, selected, sPartition, sIndex];
+    const thisTooltip = [partition, index, isSelected, sPartition, sIndex];
 
     if (!arrayEq(lastTooltip, thisTooltip)) {
       // If selected, show info relevant to the selected linearization
-      const maxIndex = selected
+      const maxIndex = isSelected
         ? linearizationIndex(sPartition, sIndex)
         : linearizationIndex(partition, index);
 
@@ -797,13 +799,13 @@ function render(data) {
         // Annotation
         const details = annotations[index].Details;
         tooltip.innerHTML = details.length === 0 ? '&langle;no details&rangle;' : details;
-      } else if (selected && sPartition !== partition) {
+      } else if (isSelected && sPartition !== partition) {
         tooltip.innerHTML =
           metadata + 'Not part of selected partition.' + formatCallReturn(callTime, returnTime);
       } else if (maxIndex === null) {
         tooltip.innerHTML =
           metadata +
-          (selected
+          (isSelected
             ? 'Selected element is not part of any partial linearization.'
             : 'Not part of any partial linearization.') +
           formatCallReturn(callTime, returnTime);
@@ -811,19 +813,19 @@ function render(data) {
         const lin = coreHistory[partition].PartialLinearizations[maxIndex];
         let previous = null;
         let current = null;
-        let found = false;
+        let isFound = false;
         for (const element of lin) {
           previous = current;
           current = element;
           if (current.Index === index) {
-            found = true;
+            isFound = true;
             break;
           }
         }
 
         let message = metadata;
 
-        if (found) {
+        if (isFound) {
           // Part of linearization
           if (previous !== null) {
             message +=
@@ -865,7 +867,7 @@ function render(data) {
   }
 
   function handleMouseOut() {
-    if (selected) {
+    if (isSelected) {
       return;
     }
 
@@ -909,7 +911,7 @@ function render(data) {
       jump.classList.remove('inactive');
       jumpClickHandler = () => {
         point.element.scrollIntoView({behavior: 'smooth', inline: 'center', block: 'center'});
-        if (!selected) {
+        if (!isSelected) {
           select(point.partition, point.index);
         }
       };
@@ -923,7 +925,7 @@ function render(data) {
   function handleClick(event_) {
     const partition = Number(this.dataset.partition);
     const index = Number(this.dataset.index);
-    if (selected) {
+    if (isSelected) {
       const [sPartition, sIndex] = selectedIndex;
       if (partition === sPartition && index === sIndex) {
         deselect();
@@ -955,7 +957,7 @@ function render(data) {
   }
 
   function select(partition, index) {
-    selected = true;
+    isSelected = true;
     selectedIndex = [partition, index];
     highlight(partition, index);
     historyRects[partition][index].classList.add('selected');
@@ -963,11 +965,11 @@ function render(data) {
   }
 
   function deselect() {
-    if (!selected) {
+    if (!isSelected) {
       return;
     }
 
-    selected = false;
+    isSelected = false;
     resetHighlight();
     const [partition, index] = selectedIndex;
     historyRects[partition][index].classList.remove('selected');
