@@ -19,7 +19,7 @@ type historyElement struct {
 	Description   string
 	Metadata      string
 	Id            int
-	FirstUnk     []int
+	FirstUnk      []int
 }
 
 type annotation struct {

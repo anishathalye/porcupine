@@ -8,11 +8,11 @@ import (
 type operationHistory [][]clientOperation
 
 type clientOperation struct {
-	Op        Operation
-	globalId  int   // global operation id
-	id        int   // partition-local id
-	firstUnk  []int // firstUnk[c] is the index of the first operation from client c that has no outgoing HardBefore dependency to this op
-	visited   bool  // whether the firstUnk of this op has been computed
+	Op       Operation
+	globalId int   // global operation id
+	id       int   // partition-local id
+	firstUnk []int // firstUnk[c] is the index of the first operation from client c that has no outgoing HardBefore dependency to this op
+	visited  bool  // whether the firstUnk of this op has been computed
 }
 
 func newclientOperation(op Operation, numClients int, id int) clientOperation {
