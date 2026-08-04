@@ -1,8 +1,8 @@
 package porcupine
 
 import (
+	"context"
 	"fmt"
-	"sync/atomic"
 )
 
 type operationHistory [][]clientOperation
@@ -219,11 +219,11 @@ type stackEntry struct { // entry in the stack
 }
 
 // Try to lift the operation at the head of this client.
-func (c *client) lift(model Model, consistency Consistency, oldState interface{},
+func (c *client) lift(ctx context.Context, model Model, consistency Consistency, oldState interface{},
 	cache map[uint64][]cacheEntry, serialized *bitset) (interface{}, bool) {
 	// Is this allowed by the sequential specification?
 	cltOp := c.cltOps[c.head]
-	ok, newState := consistency.Valid.Step(oldState, cltOp.Op.Input, cltOp.Op.Output, model)
+	ok, newState := consistency.Valid.Step(ctx, oldState, cltOp.Op.Input, cltOp.Op.Output, model)
 	if !ok {
 		return newState, ok
 	}
@@ -234,7 +234,7 @@ func (c *client) lift(model Model, consistency Consistency, oldState interface{}
 
 	if entries, ok := cache[hash]; ok {
 		for _, elem := range entries {
-			if serialized.equals(elem.linearized) && model.Equal(newState, elem.state) {
+			if serialized.equal(elem.linearized) && model.Equal(newState, elem.state) {
 				serialized.clear(uint(cltOp.id))
 				return oldState, false
 			}
@@ -256,7 +256,7 @@ func (c *client) unlift(top stackEntry, serialized *bitset) {
 }
 
 // Try to lift an operation from the frontier. If successful, push it on the stack and return the new state.
-func (ch *chains) lift(model Model, consistency Consistency, oldState interface{}, stack *[]stackEntry,
+func (ch *chains) lift(ctx context.Context, model Model, consistency Consistency, oldState interface{}, stack *[]stackEntry,
 	cache map[uint64][]cacheEntry, serialized *bitset, liftFrom int) (interface{}, bool) {
 	// Try to lift an operation from the frontier starting from "liftFrom"
 	for idx := liftFrom; idx >= 0; idx-- {
@@ -268,7 +268,7 @@ func (ch *chains) lift(model Model, consistency Consistency, oldState interface{
 			opIdx:       ch.clients[i].head,
 			frontierIdx: idx,
 		}
-		newState, success := ch.clients[i].lift(model, consistency, oldState, cache, serialized)
+		newState, success := ch.clients[i].lift(ctx, model, consistency, oldState, cache, serialized)
 		if success {
 			*stack = append(*stack, e)
 			ch.computeFirstUnk(i, consistency)
@@ -331,7 +331,7 @@ func (ch *chains) unlift(stack *[]stackEntry, serialized *bitset, consistency Co
 	return top.state, top.frontierIdx
 }
 
-func checkSingle(model Model, consistency Consistency, history operationHistory, computePartial bool, kill *int32) (bool, []*[]int) {
+func checkSingle(ctx context.Context, model Model, consistency Consistency, history operationHistory, computePartial bool) (bool, []*[]int) {
 	// Initialize chains
 	ch := newChains(history, consistency)
 
@@ -351,12 +351,12 @@ func checkSingle(model Model, consistency Consistency, history operationHistory,
 
 	// while all operations are not serialized, explore permutations
 	for !ch.isComplete() {
-		if atomic.LoadInt32(kill) != 0 {
+		if ctx.Err() != nil {
 			fmt.Printf("Total_pop: %d\n", pops)
 			return false, longest
 		}
 		// try serializing an operation from frontier
-		newState, ok := ch.lift(model, consistency, state, &stack, cache, &serialized, liftFrom)
+		newState, ok := ch.lift(ctx, model, consistency, state, &stack, cache, &serialized, liftFrom)
 		if ok {
 			state = newState
 			liftFrom = len(ch.frontier) - 1

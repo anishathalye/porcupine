@@ -169,7 +169,6 @@ type cacheEntry struct {
 	state      interface{}
 }
 
-
 func fillDefault(model Model) Model {
 	if model.Partition == nil {
 		model.Partition = noPartition

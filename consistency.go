@@ -1,6 +1,7 @@
 package porcupine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
@@ -30,7 +31,7 @@ type Oracle func(a *Operation, b *Operation) (OrderKind, error)
 // Validity defines valid serializations for a model.
 type Validity struct {
 	Init func(model Model) interface{}
-	Step func(state interface{}, input interface{}, output interface{}, model Model) (bool, interface{})
+	Step func(ctx context.Context, state interface{}, input interface{}, output interface{}, model Model) (bool, interface{})
 }
 
 // Consistency encodes a consistency property.
@@ -119,8 +120,8 @@ var RVal = Validity{
 	Init: func(model Model) interface{} {
 		return model.Init()
 	},
-	Step: func(state interface{}, input interface{}, output interface{}, model Model) (bool, interface{}) {
-		return model.Step(state, input, output)
+	Step: func(ctx context.Context, state interface{}, input interface{}, output interface{}, model Model) (bool, interface{}) {
+		return model.StepContext(ctx, state, input, output)
 	},
 }
 
