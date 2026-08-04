@@ -1,9 +1,12 @@
-<!-- eslint-disable @html-eslint/indent, @html-eslint/require-closing-tags, @html-eslint/no-extra-spacing-tags, @html-eslint/attrs-newline, @html-eslint/sort-attrs, @html-eslint/head-order -->
+<!-- eslint-disable @html-eslint/head-order -->
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="description" content="Porcupine linearizability checker visualization" />
+    <meta
+      name="description"
+      content="Porcupine linearizability checker visualization"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta property="og:title" content="Porcupine" />
     <meta property="og:type" content="website" />
@@ -16,17 +19,50 @@
   </head>
   <body>
     <div id="legend">
-      <svg height="20" viewBox="0 0 660 20" width="660" xmlns="http://www.w3.org/2000/svg">
+      <svg
+        height="20"
+        viewBox="0 0 660 20"
+        width="660"
+        xmlns="http://www.w3.org/2000/svg"
+      >
         <text x="0" y="10">Clients</text>
-        <line stroke="#000" stroke-width="1" x1="50" x2="70" y1="0" y2="20"></line>
+        <line
+          stroke="#000"
+          stroke-width="1"
+          x1="50"
+          x2="70"
+          y1="0"
+          y2="20"
+        ></line>
         <text x="70" y="10">Time</text>
-        <line stroke="#000" stroke-width="2" x1="110" x2="200" y1="10" y2="10"></line>
+        <line
+          stroke="#000"
+          stroke-width="2"
+          x1="110"
+          x2="200"
+          y1="10"
+          y2="10"
+        ></line>
         <polygon fill="#000" points="200,5 200,15, 210,10"></polygon>
-        <rect fill="rgba(0, 0, 0, 0.5)" height="10" width="10" x="300" y="5"></rect>
+        <rect
+          fill="rgba(0, 0, 0, 0.5)"
+          height="10"
+          width="10"
+          x="300"
+          y="5"
+        ></rect>
         <text x="315" y="10">Valid LP</text>
-        <rect fill="rgba(255, 0, 0, 0.5)" height="10" width="10" x="400" y="5"></rect>
+        <rect
+          fill="rgba(255, 0, 0, 0.5)"
+          height="10"
+          width="10"
+          x="400"
+          y="5"
+        ></rect>
         <text x="415" y="10">Invalid LP</text>
-        <text class="link" id="jump-link" x="520" y="10">[ jump to first error ]</text>
+        <text class="link" id="jump-link" x="520" y="10">
+          [ jump to first error ]
+        </text>
       </svg>
     </div>
     <div id="canvas"></div>

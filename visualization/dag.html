@@ -1,4 +1,4 @@
-<!-- eslint-disable @html-eslint/indent, @html-eslint/require-closing-tags, @html-eslint/no-extra-spacing-tags, @html-eslint/attrs-newline, @html-eslint/sort-attrs, @html-eslint/head-order -->
+<!-- eslint-disable @html-eslint/head-order -->
 <!doctype html>
 <html lang="en">
   <head>
@@ -65,7 +65,11 @@
 
   <body>
     <div id="search-container">
-      <input id="search-input" placeholder="Search operation description" type="text" />
+      <input
+        id="search-input"
+        placeholder="Search operation description"
+        type="text"
+      />
       <button type="submit" onclick="searchNode(false)">Search</button>
       <button type="submit" onclick="searchNode(true)">Next</button>
       <button type="submit" onclick="resetSearch()">Reset</button>
