@@ -586,46 +586,43 @@ function render(data) {
       }
 
       for (const [index, element] of partition.History.entries()) {
-        if (included.has(index) || element.Start >= minEnd) {
-          continue;
-        }
-
-        const hereX = t0x + xPos[element.Start];
-        const x = previousX === null ? hereX : Math.max(hereX, previousX + EPSILON);
-        const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED; // eslint-disable-line @stylistic/no-mixed-operators
-        // Line from previous
-        svgadd(g, 'line', {
-          x1: previousX,
-          x2: x,
-          y1:
-            previousElement.ClientId >= element.ClientId
-              ? previousY
-              : previousY + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
-          y2: previousElement.ClientId <= element.ClientId ? y : y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
-          class: 'linearization-invalid linearization-line',
-        });
-        // Current line
-        const point = svgadd(g, 'line', {
-          x1: x,
-          x2: x,
-          y1: y,
-          y2: y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
-          class: 'linearization-invalid linearization-point',
-        });
-        errorPoints.push({
-          x,
-          partition: partitionIndex,
-          index: lin.at(-1).Index, // NOTE not index
-          element: point,
-        });
-        illegalLast[partitionIndex][linIndex].add(index);
-        // eslint-disable-next-line max-depth
-        if (
-          !Object.hasOwn(largestIllegalLength[partitionIndex], index) ||
-          largestIllegalLength[partitionIndex][index] < lin.length
-        ) {
-          largestIllegalLength[partitionIndex][index] = lin.length;
-          largestIllegal[partitionIndex][index] = linIndex;
+        if (!included.has(index) && element.Start < minEnd) { // eslint-disable-line unicorn/prefer-continue
+          const hereX = t0x + xPos[element.Start];
+          const x = previousX === null ? hereX : Math.max(hereX, previousX + EPSILON);
+          const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED; // eslint-disable-line @stylistic/no-mixed-operators
+          // Line from previous
+          svgadd(g, 'line', {
+            x1: previousX,
+            x2: x,
+            y1:
+              previousElement.ClientId >= element.ClientId
+                ? previousY
+                : previousY + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
+            y2: previousElement.ClientId <= element.ClientId ? y : y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
+            class: 'linearization-invalid linearization-line',
+          });
+          // Current line
+          const point = svgadd(g, 'line', {
+            x1: x,
+            x2: x,
+            y1: y,
+            y2: y + BOX_HEIGHT + 2 * LINE_BLEED, // eslint-disable-line @stylistic/no-mixed-operators
+            class: 'linearization-invalid linearization-point',
+          });
+          errorPoints.push({
+            x,
+            partition: partitionIndex,
+            index: lin.at(-1).Index, // NOTE not index
+            element: point,
+          });
+          illegalLast[partitionIndex][linIndex].add(index);
+          if (
+            !Object.hasOwn(largestIllegalLength[partitionIndex], index) ||
+            largestIllegalLength[partitionIndex][index] < lin.length
+          ) {
+            largestIllegalLength[partitionIndex][index] = lin.length;
+            largestIllegal[partitionIndex][index] = linIndex;
+          }
         }
       }
     }
