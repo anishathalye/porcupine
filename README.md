@@ -15,16 +15,21 @@ visualizer for histories and serialization points.
 (click for interactive version)
 </p>
 
-Porcupine implements the algorithm described in [Faster linearizability
-checking via P-compositionality][faster-linearizability-checking], an
-optimization of the algorithm described in [Testing for
-Linearizability][linearizability-testing].
+Porcupine generalizes the Wing-Gong linearizability checking algorithm to check
+for a broader set of non-transactional consistency guarantees that are stronger
+than sequential consistency, such as ordered sequential consistency and regular
+sequential consistency. It maintains the operation history as a DAG instead of a
+doubly linked list, enabling the use of both hard and soft ordering constraints.
+Porcupine also supports checking system-specific consistency guarantees by
+utilizing ordering hints provided by the storage system.
 
 Porcupine is faster and can handle more histories than [Knossos][knossos]'s
 linearizability checker. Testing on the data in `test_data/jepsen/`, Porcupine
 is generally **1,000x**-**10,000x** faster and has a much smaller memory
 footprint. On histories where it can take advantage of P-compositionality,
-Porcupine can be millions of times faster.
+Porcupine can be millions of times faster. When checking for system-specific
+consistency guarantees, Porcupine can be up to 370x faster and can scale to more
+concurrent clients within the same checking time budget.
 
 ## Usage
 
@@ -210,7 +215,26 @@ var RealTime = porcupine.Oracle{
 }
 ```
 
-The `Compare` function compares two operations and returns the ordering relationship between them. `HardBefore` indicates that `a` must be ordered before `b`. `HardAfter` indicates that `a` must be ordered after `b`. `Unconstrained` indicates that there is no ordering constraint between `a` and `b`.
+The Compare function compares two operations and returns the ordering
+relationship between them. The oracle can return one of 5 ordering outcomes:
+
+* HardBefore indicates that `a` must be ordered before `b`.
+* HardAfter indicates that `a` must be ordered after `b`.
+* SoftBefore indicates that `a` should usually precede `b` in normal
+  circumstances, acting as a soft constraint. The algorithm modifies the standard
+  topological order finding to prioritize picking operations within the current
+  frontier using these soft edges.
+* SoftAfter indicates that `a` should usually follow `b` in normal
+  circumstances, acting as a soft constraint.
+* Unconstrained indicates that there is no ordering constraint between `a` and
+  `b`.
+
+Beyond standard models like RealTime, Oracle functions can be used to check
+system-specific consistency guarantees. By adding system-specific ordering hints
+(like a revision number in etcd or a zxid in ZooKeeper) within responses, these
+hints can be used in the custom Compare logic. Because these constraints reduce
+the number of possible operation permutations the checker needs to try, it
+significantly accelerates checking.
 
 For performance reasons, the comparator implicitly contains session-order
 relations, i.e., ordering between operations from the same client session.
@@ -333,7 +357,9 @@ from servers or the test framework. You can do this using the
 - If Porcupine runs really slowly on your model/history, it may be inevitable,
   due to state space explosion. See [this
   issue](https://github.com/anishathalye/porcupine/issues/6) for a discussion
-  of this challenge in the context of a particular model and history.
+  of this challenge in the context of a particular model and history. Utilizing
+  system-specific consistency checking with ordering hints can often drastically
+  reduce this search space.
 - When recording timestamps for operations, especially on ARM and other
   weakly-ordered architectures, you may need to use memory barriers or atomic
   operations to ensure accurate measurements and avoid spurious linearizability
