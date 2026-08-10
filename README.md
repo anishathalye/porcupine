@@ -372,14 +372,16 @@ Porcupine is used in both academia and industry. It can be helpful to look at
 existing uses of Porcupine to learn how you can design a robust testing
 framework with linearizability checking at its core.
 
-- [etcd](https://github.com/etcd-io/etcd). etcd uses Porcupine's linearizability checker and visualizer in its [robustness tests](https://github.com/etcd-io/etcd/tree/main/tests/robustness) [[KubeCon 2023eu talk](https://www.youtube.com/watch?v=IIMs0EjQZHg)].
-- [PingCAP TiPocket](https://github.com/pingcap/tipocket). PingCAP uses Porcupine to test the [TiDB](https://www.pingcap.com/tidb/) distributed database.
-- [Amazon MemoryDB (SIGMOD'24)](https://www.amazon.science/publications/amazon-memorydb-a-fast-and-durable-memory-first-cloud-database). Amazon uses Porcupine to test MemoryDB consistency.
-- [S2 Stream Store](https://s2.dev/). S2 [uses](https://s2.dev/blog/linearizability) Porcupine's linearizability checker and visualizer in its [linearizability tests](https://github.com/s2-streamstore/s2-verification).
-- [LEGOStore (VLDB'22)](https://www.vldb.org/pvldb/vol15/p2201-zare.pdf). Porcupine is used to test the linearizability of LEGOStore.
-- [Resonate](https://github.com/resonatehq/durable-promise-test-harness). Resonate's test harness uses Porcupine as its linearizability checker.
-- [MIT 6.5840 (Distributed Systems) key-value store](https://pdos.csail.mit.edu/6.824/labs/lab-kvraft.html). Porcupine was originally developed for use in MIT's distributed systems class to test the linearizability of the Raft-based distributed key-value store.
-- [IIT Delhi COL733 (Cloud computing technology fundamentals) object store](https://github.com/codenet/col733-cloud/tree/main/labs/lab3). The testing harness uses Porcupine to test the linearizability of the strongly-consistent variant of [CRAQ](https://www.usenix.org/legacy/event/usenix09/tech/full_papers/terrace/terrace.pdf).
+- [etcd](https://github.com/etcd-io/etcd) uses Porcupine's linearizability checker and visualizer in its [robustness tests](https://github.com/etcd-io/etcd/tree/main/tests/robustness) [[KubeCon 2023eu talk](https://www.youtube.com/watch?v=IIMs0EjQZHg)].
+- [Amazon MemoryDB (SIGMOD'24)](https://www.amazon.science/publications/amazon-memorydb-a-fast-and-durable-memory-first-cloud-database) uses Porcupine to test MemoryDB consistency.
+- [S2 Stream Store](https://s2.dev/) [uses](https://s2.dev/blog/linearizability) Porcupine's linearizability checker and visualizer in its [linearizability tests](https://github.com/s2-streamstore/s2-verification).
+- [LEGOStore (VLDB'22)](https://www.vldb.org/pvldb/vol15/p2201-zare.pdf) uses Porcupine to test the linearizability of LEGOStore.
+- [Fission](https://github.com/fission/fission) uses Porcupine to [test the linearizability](https://github.com/fission/fission/blob/main/pkg/statestore/statestoretest/linearizability.go) of its per-function key-value statestore.
+- [UnisonDB](https://github.com/ankur-anand/unisondb) uses Porcupine to test the linearizability of its key-value [storage engine](https://github.com/ankur-anand/unisondb/blob/main/dbkernel/engine_public_test.go).
+- [Querator](https://github.com/kapetan-io/querator) uses Porcupine's linearizability checker and visualizer in its [linearizability tests](https://github.com/kapetan-io/querator/blob/main/service/linearizability_test.go) to check FIFO ordering and lease semantics.
+- [BuildBuddy](https://github.com/buildbuddy-io/buildbuddy) uses Porcupine's linearizability checker and visualizer in its [Raft store linearizability tests](https://github.com/buildbuddy-io/buildbuddy/blob/master/enterprise/server/raft/store/linearizability/linearizability_test.go).
+- [MIT 6.5840 (Distributed Systems) key-value store](https://pdos.csail.mit.edu/6.824/labs/lab-kvraft.html) was the original motivation for the development of Porcupine, which is used to test the linearizability of the course's Raft-based distributed key-value store.
+- [IIT Delhi COL733 (Cloud computing technology fundamentals) object store](https://github.com/codenet/col733-cloud/tree/main/labs/lab3)'s testing harness uses Porcupine to test the linearizability of the strongly-consistent variant of [CRAQ](https://www.usenix.org/legacy/event/usenix09/tech/full_papers/terrace/terrace.pdf).
 
 Does your system use Porcupine? Send a PR to add it to this list!
 
