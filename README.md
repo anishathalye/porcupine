@@ -15,11 +15,16 @@ visualizer for histories and serialization points.
 (click for interactive version)
 </p>
 
-Porcupine generalizes the Wing-Gong linearizability checking algorithm to check
-for a broader set of non-transactional consistency guarantees that are stronger
-than sequential consistency, such as ordered sequential consistency and regular
-sequential consistency. It maintains the operation history as a DAG instead of a
-doubly linked list, enabling the use of both hard and soft ordering constraints.
+Porcupine implements the P-compositionality optimization from [Faster
+linearizability checking via
+P-compositionality](https://arxiv.org/pdf/1504.00204) alongside the DAG-based
+checking algorithm introduced in [Generalizing and accelerating consistency
+checking for non-transactional distributed storage systems
+](https://arxiv.org/pdf/2608.17388). By generalizing the classic Wing-Gong
+linearizability checking algorithm, Porcupine can check for a broad set of
+non-transactional consistency guarantees that are stronger than sequential
+consistency, such as ordered sequential consistency and regular sequential
+consistency. It allows usage of both hard and soft ordering constraints.
 Porcupine also supports checking system-specific consistency guarantees by
 utilizing ordering hints provided by the storage system.
 
