@@ -96,7 +96,7 @@ var RealTime Oracle = func(a *Operation, b *Operation) (OrderKind, error) {
 	if a.Call > b.Return {
 		return HardAfter, nil
 	}
-	return Concurrent, nil
+	return DontKnow, nil
 }
 
 var LinearizabilityOracles = []Oracle{RealTime, GeneralLikely}
