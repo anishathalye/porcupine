@@ -108,3 +108,15 @@ text {
 .inactive {
   display: none;
 }
+
+.dep-constraint {
+  stroke: rgba(255, 140, 0, 0.85);
+}
+
+.dep-constraint-line {
+  stroke-width: 2;
+}
+
+.dep-constraint-point {
+  stroke-width: 5;
+}

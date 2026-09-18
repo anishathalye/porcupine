@@ -1,0 +1,152 @@
+<!-- eslint-disable @html-eslint/head-order -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content="Pine DAG visualization" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta property="og:title" content="Pine" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://example.com" />
+    <meta property="og:image" content="https://example.com/og.png" />
+    <title>Pine</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        width: 100%%;
+        height: 100%%;
+        font-family: sans-serif;
+      }
+
+      #search-container {
+        padding: 10px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      #search-input {
+        width: 300px;
+        padding: 8px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+      }
+
+      button {
+        padding: 8px 16px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #0b5ed7;
+      }
+
+      #mynetwork {
+        width: 100%%;
+        height: calc(100vh - 60px);
+      }
+
+      #search-status {
+        margin-left: 10px;
+        color: #6c757d;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="search-container">
+      <input
+        id="search-input"
+        placeholder="Search operation description"
+        type="text"
+      />
+      <button type="submit" onclick="searchNode(false)">Search</button>
+      <button type="submit" onclick="searchNode(true)">Next</button>
+      <button type="submit" onclick="resetSearch()">Reset</button>
+      <span id="search-status"></span>
+    </div>
+    <div id="mynetwork"></div>
+
+    <script>
+      var nodesData = %s;
+      var edgesData = %s;
+
+      var nodes = new vis.DataSet(nodesData);
+      var edges = new vis.DataSet(edgesData);
+
+      var container = document.getElementById('mynetwork');
+      var data = { nodes: nodes, edges: edges };
+      var options = {
+          physics: false,
+          nodes: { shape: 'box', font: { size: 14, face: 'sans-serif' } },
+          edges: { smooth: { type: 'cubicBezier', forceDirection: 'vertical', roundness: 0.4 }, color: { inherit: 'to' } },
+          interaction: { hover: true, tooltipDelay: 200, dragNodes: false }
+      };
+      var network = new vis.Network(container, data, options);
+
+      var currentSearchText = "";
+      var currentMatched = [];
+      var currentSearchIndex = 0;
+
+      function searchNode(isNext) {
+          var searchText = document.getElementById('search-input').value.toLowerCase();
+          if (!searchText) return;
+
+          var statusSpan = document.getElementById('search-status');
+
+          if (!isNext || searchText !== currentSearchText) {
+              currentSearchText = searchText;
+              currentSearchIndex = 0;
+              currentMatched = [];
+              nodes.forEach(function (n) {
+                  var searchLabel = n.label ? n.label.replace(/\n/g, " ").toLowerCase() : "";
+                  var searchTitle = n.title ? n.title.toLowerCase() : "";
+                  if (searchLabel.includes(searchText) || searchTitle.includes(searchText)) {
+                      currentMatched.push(n.id);
+                  }
+              });
+          } else {
+              if (currentMatched.length > 0) {
+                  currentSearchIndex = (currentSearchIndex + 1) %% currentMatched.length;
+              }
+          }
+
+          if (currentMatched.length > 0) {
+              network.selectNodes(currentMatched);
+              network.focus(currentMatched[currentSearchIndex], { scale: 1.2, animation: true });
+              statusSpan.textContent = "Showing " + (currentSearchIndex + 1) + " of " + currentMatched.length + " matches";
+          } else {
+              statusSpan.textContent = "";
+              alert("No operations found matching your search.");
+          }
+      }
+
+      function resetSearch() {
+          document.getElementById('search-input').value = "";
+          document.getElementById('search-status').textContent = "";
+          currentSearchText = "";
+          currentMatched = [];
+          currentSearchIndex = 0;
+          network.unselectAll();
+          network.fit({ animation: true });
+      }
+
+      document.getElementById("search-input").addEventListener("keypress", function (event) {
+          if (event.key === "Enter") {
+              event.preventDefault();
+              searchNode(false);
+          }
+      });
+    </script>
+  </body>
+</html>

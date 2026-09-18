@@ -19,12 +19,16 @@ type entry struct {
 	id       int
 	time     int64
 	clientId int
+	opKind   OperationKind
 	metadata interface{}
+	hint     interface{}
 }
 
+type entries []entry
+
 type LinearizationInfo struct {
-	history               [][]entry // for each partition, a list of entries
-	partialLinearizations [][][]int // for each partition, a set of histories (list of ids)
+	history               []operationHistory // for each partition, a list of client operations
+	partialLinearizations [][][]int          // for each partition, a set of histories (list of ids)
 	annotations           []Annotation
 }
 
@@ -48,39 +52,12 @@ func (li *LinearizationInfo) PartialLinearizations() [][][]int {
 // linearizable, it contains the maximal partial linearizations found.
 func (li *LinearizationInfo) PartialLinearizationsOperations() [][][]Operation {
 	result := make([][][]Operation, len(li.history))
-	for p, partition := range li.history {
-		// reconstruct operations based on entries
-		callMap := make(map[int]entry)
-		retMap := make(map[int]entry)
-		for _, e := range partition {
-			if e.kind == callEntry {
-				callMap[e.id] = e
-			} else {
-				retMap[e.id] = e
-			}
-		}
-
+	for p, clientOps := range li.history {
+		// build a map from global operation id to Operation
 		opMap := make(map[int]Operation)
-		for id, call := range callMap {
-			ret, ok := retMap[id]
-			if !ok {
-				// this should never happen, because the LinearizationInfo
-				// object should always contain valid partial linearizations,
-				// where there is a return for every call
-				panic("cannot find corresponding return for call")
-			}
-			// prefer return metadata over call metadata
-			metadata := call.metadata
-			if ret.metadata != nil {
-				metadata = ret.metadata
-			}
-			opMap[id] = Operation{
-				ClientId: call.clientId,
-				Input:    call.value,
-				Call:     call.time,
-				Output:   ret.value,
-				Return:   ret.time,
-				Metadata: metadata,
+		for _, cltOps := range clientOps {
+			for _, cltOp := range cltOps {
+				opMap[cltOp.globalId] = cltOp.Op
 			}
 		}
 
@@ -104,7 +81,7 @@ func (li *LinearizationInfo) PartialLinearizationsOperations() [][][]Operation {
 	return result
 }
 
-type byTime []entry
+type byTime entries
 
 func (a byTime) Len() int {
 	return len(a)
@@ -123,39 +100,26 @@ func (a byTime) Less(i, j int) bool {
 	return a[i].kind == callEntry && a[j].kind == returnEntry
 }
 
-func makeEntries(history []Operation) []entry {
-	var entries []entry = nil
+func makeEntries(history []Operation, numClients int) (entries, operationHistory) {
+	var entries entries = nil
 	id := 0
+	operationHistory := make(operationHistory, numClients)
 	for _, elem := range history {
 		entries = append(entries, entry{
-			callEntry, elem.Input, id, elem.Call, elem.ClientId, elem.Metadata})
+			kind: callEntry, value: elem.Input, id: id, time: elem.Call,
+			clientId: elem.ClientId, opKind: elem.OpKind, metadata: elem.Metadata,
+		})
 		entries = append(entries, entry{
-			returnEntry, elem.Output, id, elem.Return, elem.ClientId, elem.Metadata})
+			kind: returnEntry, value: elem.Output, id: id, time: elem.Return,
+			clientId: elem.ClientId, opKind: elem.OpKind, metadata: elem.Metadata,
+			hint: elem.OrderHint,
+		})
+		clientOp := newclientOperation(elem, numClients, id)
+		operationHistory[elem.ClientId] = append(operationHistory[elem.ClientId], clientOp)
 		id++
 	}
 	sort.Sort(byTime(entries))
-	return entries
-}
-
-type node struct {
-	value interface{}
-	match *node // call if match is nil, otherwise return
-	id    int
-	next  *node
-	prev  *node
-}
-
-func insertBefore(n *node, mark *node) *node {
-	if mark != nil {
-		beforeMark := mark.prev
-		mark.prev = n
-		n.next = mark
-		if beforeMark != nil {
-			n.prev = beforeMark
-			beforeMark.next = n
-		}
-	}
-	return n
+	return entries, operationHistory
 }
 
 func renumber(events []Event) []Event {
@@ -164,9 +128,9 @@ func renumber(events []Event) []Event {
 	id := 0
 	for _, v := range events {
 		if r, ok := m[v.Id]; ok {
-			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: r, Metadata: v.Metadata})
+			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: r, Metadata: v.Metadata, OpKind: v.OpKind, Hint: v.Hint})
 		} else {
-			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: id, Metadata: v.Metadata})
+			e = append(e, Event{ClientId: v.ClientId, Kind: v.Kind, Value: v.Value, Id: id, Metadata: v.Metadata, OpKind: v.OpKind, Hint: v.Hint})
 			m[v.Id] = id
 			id++
 		}
@@ -174,162 +138,35 @@ func renumber(events []Event) []Event {
 	return e
 }
 
-func convertEntries(events []Event) []entry {
-	var entries []entry
+func convertEntries(events []Event) (entries, int) {
+	var entries entries
+	maxClientId := 0
 	for i, elem := range events {
 		kind := callEntry
 		if elem.Kind == ReturnEvent {
 			kind = returnEntry
 		}
 		// use index as "time"
-		entries = append(entries, entry{kind, elem.Value, elem.Id, int64(i), elem.ClientId, elem.Metadata})
-	}
-	return entries
-}
-
-func makeLinkedEntries(entries []entry) *node {
-	var root *node = nil
-	match := make(map[int]*node)
-	for i := len(entries) - 1; i >= 0; i-- {
-		elem := entries[i]
-		if elem.kind == returnEntry {
-			entry := &node{value: elem.value, match: nil, id: elem.id}
-			match[elem.id] = entry
-			insertBefore(entry, root)
-			root = entry
-		} else {
-			entry := &node{value: elem.value, match: match[elem.id], id: elem.id}
-			insertBefore(entry, root)
-			root = entry
+		entries = append(entries, entry{
+			kind:     kind,
+			value:    elem.Value,
+			id:       elem.Id,
+			time:     int64(i),
+			clientId: elem.ClientId,
+			opKind:   elem.OpKind,
+			metadata: elem.Metadata,
+			hint:     elem.Hint,
+		})
+		if elem.ClientId > maxClientId {
+			maxClientId = elem.ClientId
 		}
 	}
-	return root
+	return entries, maxClientId + 1
 }
 
 type cacheEntry struct {
 	linearized bitset
 	state      interface{}
-}
-
-func cacheKey(model Model, linearized bitset, state interface{}) uint64 {
-	h := linearized.hash()
-	if model.Hash != nil {
-		h ^= model.Hash(state)
-	}
-	return h
-}
-
-func cacheContains(model Model, bucket []cacheEntry, linearized bitset, state interface{}) bool {
-	for _, elem := range bucket {
-		if linearized.equal(elem.linearized) && model.Equal(state, elem.state) {
-			return true
-		}
-	}
-	return false
-}
-
-type callsEntry struct {
-	entry *node
-	state interface{}
-}
-
-func lift(entry *node) {
-	entry.prev.next = entry.next
-	entry.next.prev = entry.prev
-	match := entry.match
-	match.prev.next = match.next
-	if match.next != nil {
-		match.next.prev = match.prev
-	}
-}
-
-func unlift(entry *node) {
-	match := entry.match
-	match.prev.next = match
-	if match.next != nil {
-		match.next.prev = match
-	}
-	entry.prev.next = entry
-	entry.next.prev = entry
-}
-
-func checkSingle(ctx context.Context, model Model, history []entry, computePartial bool) (bool, []*[]int) {
-	entry := makeLinkedEntries(history)
-	n := len(history) / 2
-	linearized := newBitset(uint(n))
-	cache := make(map[uint64][]cacheEntry) // map from hash to cache entry
-	var calls []callsEntry
-	// longest linearizable prefix that includes the given entry
-	longest := make([]*[]int, n)
-
-	state := model.Init()
-	headEntry := insertBefore(&node{value: nil, match: nil, id: -1}, entry)
-	for headEntry.next != nil {
-		if ctx.Err() != nil {
-			return false, longest
-		}
-		if entry.match != nil {
-			matching := entry.match // the return entry
-			ok, newState := model.StepContext(ctx, state, entry.value, matching.value)
-			if ctx.Err() != nil {
-				return false, longest
-			}
-			if ok {
-				linearized.set(uint(entry.id))
-				key := cacheKey(model, linearized, newState)
-				bucket := cache[key]
-				if !cacheContains(model, bucket, linearized, newState) {
-					cache[key] = append(bucket, cacheEntry{linearized.clone(), newState})
-					calls = append(calls, callsEntry{entry, state})
-					state = newState
-					lift(entry)
-					entry = headEntry.next
-				} else {
-					linearized.clear(uint(entry.id))
-					entry = entry.next
-				}
-			} else {
-				entry = entry.next
-			}
-		} else {
-			if len(calls) == 0 {
-				return false, longest
-			}
-			// longest
-			if computePartial {
-				callsLen := len(calls)
-				var seq []int = nil
-				for _, v := range calls {
-					if longest[v.entry.id] == nil || callsLen > len(*longest[v.entry.id]) {
-						// create seq lazily
-						if seq == nil {
-							seq = make([]int, len(calls))
-							for i, v := range calls {
-								seq[i] = v.entry.id
-							}
-						}
-						longest[v.entry.id] = &seq
-					}
-				}
-			}
-			callsTop := calls[len(calls)-1]
-			entry = callsTop.entry
-			state = callsTop.state
-			linearized.clear(uint(entry.id))
-			calls = calls[:len(calls)-1]
-			unlift(entry)
-			entry = entry.next
-		}
-	}
-	// longest linearization is the complete linearization, which is calls
-	seq := make([]int, len(calls))
-	for i, v := range calls {
-		seq[i] = v.entry.id
-	}
-	for i := 0; i < n; i++ {
-		longest[i] = &seq
-	}
-	return true, longest
 }
 
 func fillDefault(model Model) Model {
@@ -367,7 +204,7 @@ func fillDefault(model Model) Model {
 	return model
 }
 
-func checkParallel(model Model, history [][]entry, computeInfo bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func checkParallel(model Model, consistency Consistency, history []operationHistory, entries []entries, computeInfo bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	if len(history) == 0 {
 		return Ok, LinearizationInfo{}
 	}
@@ -378,8 +215,8 @@ func checkParallel(model Model, history [][]entry, computeInfo bool, timeout tim
 	results := make(chan bool, len(history))
 	longest := make([][]*[]int, len(history))
 	for i, subhistory := range history {
-		go func(i int, subhistory []entry) {
-			ok, l := checkSingle(ctx, model, subhistory, computeInfo)
+		go func(i int, subhistory operationHistory) {
+			ok, l := checkSingle(ctx, model, consistency, subhistory, computeInfo)
 			longest[i] = l
 			results <- ok
 		}(i, subhistory)
@@ -450,22 +287,65 @@ loop:
 	return result, info
 }
 
-func checkEvents(model Model, history []Event, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func checkEvents(model Model, consistency Consistency, history []Event, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	model = fillDefault(model)
 	partitions := model.PartitionEvent(history)
-	l := make([][]entry, len(partitions))
+	l := make([]entries, len(partitions))
+	operationHistories := make([]operationHistory, 0, len(partitions))
+	var numClients int
 	for i, subhistory := range partitions {
-		l[i] = convertEntries(renumber(subhistory))
+		l[i], numClients = convertEntries(renumber(subhistory))
+		operationHistory := make([][]clientOperation, 0)
+		clientOperations := make(map[int][]clientOperation)
+		maxClientId := 0
+		for j, ev := range l[i] {
+			if !ev.kind { // call
+				op := Operation{
+					ClientId: ev.clientId,
+					OpKind:   ev.opKind,
+					Input:    ev.value,
+					Call:     int64(j),
+					Metadata: ev.metadata,
+				}
+				clientOperations[ev.clientId] = append(clientOperations[ev.clientId], newclientOperation(op, numClients, ev.id))
+			} else { //return
+				call := clientOperations[ev.clientId][len(clientOperations[ev.clientId])-1]
+				call.Op.Output = ev.value
+				call.Op.Return = int64(j)
+				call.Op.OrderHint = ev.hint
+				if ev.metadata != nil {
+					call.Op.Metadata = ev.metadata
+				}
+				clientOperations[ev.clientId][len(clientOperations[ev.clientId])-1] = call
+			}
+			if ev.clientId > maxClientId {
+				maxClientId = ev.clientId
+			}
+		}
+
+		for i := 0; i <= maxClientId; i++ {
+			operationHistory = append(operationHistory, clientOperations[i])
+		}
+		operationHistories = append(operationHistories, operationHistory)
 	}
-	return checkParallel(model, l, verbose, timeout)
+
+	return checkParallel(model, consistency, operationHistories, l, verbose, timeout)
 }
 
-func checkOperations(model Model, history []Operation, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
+func checkOperations(model Model, consistency Consistency, history []Operation, verbose bool, timeout time.Duration) (CheckResult, LinearizationInfo) {
 	model = fillDefault(model)
-	partitions := model.Partition(history)
-	l := make([][]entry, len(partitions))
-	for i, subhistory := range partitions {
-		l[i] = makeEntries(subhistory)
+	maxClientId := 0
+	for _, op := range history {
+		if op.ClientId > maxClientId {
+			maxClientId = op.ClientId
+		}
 	}
-	return checkParallel(model, l, verbose, timeout)
+	partitions := model.Partition(history)
+	l := make([]entries, len(partitions))
+	operationHistories := make([]operationHistory, len(partitions))
+
+	for i, subhistory := range partitions {
+		l[i], operationHistories[i] = makeEntries(subhistory, maxClientId+1)
+	}
+	return checkParallel(model, consistency, operationHistories, l, verbose, timeout)
 }

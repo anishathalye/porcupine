@@ -285,6 +285,26 @@ var etcdModel = Model{
 	},
 }
 
+var revisionOracle Oracle = func(a *Operation, b *Operation) (OrderKind, error) {
+	aHint, ok1 := a.OrderHint.(int)
+	bHint, ok2 := b.OrderHint.(int)
+	if !ok1 || !ok2 {
+		return DontKnow, nil
+	}
+	if aHint < bHint {
+		return HardBefore, nil
+	}
+	if aHint > bHint {
+		return HardAfter, nil
+	}
+	return DontKnow, nil
+}
+
+var etcdConsistency = Consistency{
+	Oracles: append([]Oracle{revisionOracle}, LinearizabilityOracles...),
+	Valid:   RVal,
+}
+
 func parseJepsenLog(filename string) []Event {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -294,15 +314,25 @@ func parseJepsenLog(filename string) []Event {
 
 	reader := bufio.NewReader(file)
 
-	invokeRead, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:invoke\s+:read\s+nil$`)
-	invokeWrite, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:invoke\s+:write\s+(\d+)$`)
-	invokeCas, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:invoke\s+:cas\s+\[(\d+)\s+(\d+)\]$`)
-	returnRead, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:ok\s+:read\s+(nil|\d+)$`)
-	returnWrite, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:ok\s+:write\s+(\d+)$`)
-	returnCas, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:(ok|fail)\s+:cas\s+\[(\d+)\s+(\d+)\]$`)
-	timeoutRead, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:fail\s+:read\s+:timed-out$`)
+	invokeRead, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:invoke\s+:read\s+nil(?:\s+:hint\s+(\d+|nil))?$`)
+	invokeWrite, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:invoke\s+:write\s+(\d+)(?:\s+:hint\s+(\d+|nil))?$`)
+	invokeCas, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:invoke\s+:cas\s+\[(\d+)\s+(\d+)\](?:\s+:hint\s+(\d+|nil))?$`)
+	returnRead, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:ok\s+:read\s+(nil|\d+)(?:\s+:hint\s+(\d+|nil))?$`)
+	returnWrite, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:ok\s+:write\s+(\d+)(?:\s+:hint\s+(\d+|nil))?$`)
+	returnCas, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:(ok|fail)\s+:cas\s+\[(\d+)\s+(\d+)\](?:\s+:hint\s+(\d+|nil))?$`)
+	timeoutRead, _ := regexp.Compile(`^INFO\s+jepsen\.util\s+-\s+(\d+)\s+:fail\s+:read\s+:timed-out(?:\s+:hint\s+(\d+|nil))?$`)
 
 	var events []Event = nil
+
+	getHint := func(args []string, index int) interface{} {
+		if len(args) > index && args[index] != "" && args[index] != "nil" {
+			val, err := strconv.Atoi(args[index])
+			if err == nil {
+				return val
+			}
+		}
+		return nil
+	}
 
 	id := 0
 	procIdMap := make(map[int]int)
@@ -322,14 +352,14 @@ func parseJepsenLog(filename string) []Event {
 		case invokeRead.MatchString(line):
 			args := invokeRead.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
-			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 0}, Id: id})
+			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 0}, Id: id, Hint: getHint(args, 2)})
 			procIdMap[proc] = id
 			id++
 		case invokeWrite.MatchString(line):
 			args := invokeWrite.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			value, _ := strconv.Atoi(args[2])
-			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 1, arg1: value}, Id: id})
+			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 1, arg1: value}, Id: id, Hint: getHint(args, 3)})
 			procIdMap[proc] = id
 			id++
 		case invokeCas.MatchString(line):
@@ -337,7 +367,7 @@ func parseJepsenLog(filename string) []Event {
 			proc, _ := strconv.Atoi(args[1])
 			from, _ := strconv.Atoi(args[2])
 			to, _ := strconv.Atoi(args[3])
-			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 2, arg1: from, arg2: to}, Id: id})
+			events = append(events, Event{ClientId: proc, Kind: CallEvent, Value: etcdInput{op: 2, arg1: from, arg2: to}, Id: id, Hint: getHint(args, 4)})
 			procIdMap[proc] = id
 			id++
 		case returnRead.MatchString(line):
@@ -351,19 +381,19 @@ func parseJepsenLog(filename string) []Event {
 			}
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{exists: exists, value: value}, Id: matchId})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{exists: exists, value: value}, Id: matchId, Hint: getHint(args, 3)})
 		case returnWrite.MatchString(line):
 			args := returnWrite.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{}, Id: matchId})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{}, Id: matchId, Hint: getHint(args, 3)})
 		case returnCas.MatchString(line):
 			args := returnCas.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{ok: args[2] == "ok"}, Id: matchId})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{ok: args[2] == "ok"}, Id: matchId, Hint: getHint(args, 5)})
 		case timeoutRead.MatchString(line):
 			// timing out a read and then continuing operations is fine
 			// we could just delete the read from the events, but we do this the lazy way
@@ -372,7 +402,7 @@ func parseJepsenLog(filename string) []Event {
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
 			// okay to put the return here in the history
-			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{unknown: true}, Id: matchId})
+			events = append(events, Event{ClientId: proc, Kind: ReturnEvent, Value: etcdOutput{unknown: true}, Id: matchId, Hint: getHint(args, 2)})
 		}
 	}
 
@@ -388,6 +418,148 @@ func checkJepsen(t *testing.T, logNum int, correct bool) {
 	res := CheckEvents(etcdModel, events)
 	if res != correct {
 		t.Fatalf("expected output %t, got output %t", correct, res)
+	}
+}
+
+func checkJepsenHints(t *testing.T, cli int, correct bool) {
+	events := parseJepsenLog(fmt.Sprintf("test_data/etcd/etcd_RR0.5_CLI%d_OPS20000.log", cli))
+	res := CheckEventsConsistency(etcdModel, etcdConsistency, events)
+	if res != correct {
+		t.Fatalf("expected output %t, got output %t", correct, res)
+	}
+}
+
+func TestEtcdConsistency(t *testing.T) {
+	// Hints match actual order
+	ops := []Operation{
+		{ClientId: 0, Input: registerInput{false, 100}, Output: 0, Call: 0, Return: 100, OrderHint: 2},
+		{ClientId: 1, Input: registerInput{true, 0}, Output: 100, Call: 25, Return: 75, OrderHint: 3},
+		{ClientId: 2, Input: registerInput{true, 0}, Output: 0, Call: 30, Return: 60, OrderHint: 1},
+	}
+
+	res := CheckOperationsConsistency(registerModel, etcdConsistency, ops)
+	if res != true {
+		t.Fatal("expected operations to be serializable")
+	}
+
+	// Out of order hints
+	ops = []Operation{
+		{ClientId: 0, Input: registerInput{false, 100}, Output: 0, Call: 0, Return: 100, OrderHint: 1},
+		{ClientId: 1, Input: registerInput{true, 0}, Output: 100, Call: 25, Return: 75, OrderHint: 3},
+		{ClientId: 2, Input: registerInput{true, 0}, Output: 0, Call: 30, Return: 60, OrderHint: 2},
+	}
+
+	res = CheckOperationsConsistency(registerModel, etcdConsistency, ops)
+	if res != false {
+		t.Fatal("expected operations to not be serializable")
+	}
+
+	// Non linearizable history
+	ops = []Operation{
+		{ClientId: 0, Input: registerInput{false, 200}, Output: 0, Call: 0, Return: 100, OrderHint: 1},
+		{ClientId: 1, Input: registerInput{true, 0}, Output: 200, Call: 10, Return: 30, OrderHint: 2},
+		{ClientId: 2, Input: registerInput{true, 0}, Output: 0, Call: 40, Return: 90, OrderHint: 3},
+	}
+	CheckOperationsConsistency(registerModel, etcdConsistency, ops)
+}
+
+func TestEtcdJepsenHintsCLI8(t *testing.T) {
+	checkJepsenHints(t, 8, true)
+}
+
+func TestEtcdJepsenHintsCLI12(t *testing.T) {
+	checkJepsenHints(t, 12, true)
+}
+
+func TestEtcdJepsenHintsCLI16(t *testing.T) {
+	checkJepsenHints(t, 16, true)
+}
+
+func TestEtcdJepsenHintsCLI20(t *testing.T) {
+	checkJepsenHints(t, 20, true)
+}
+
+type multiRegisterInput struct {
+	op       bool
+	register string
+	value    int
+}
+
+var multiRegisterModel = Model{
+	Init: func() interface{} {
+		return map[string]int{
+			"x": 0,
+			"y": 0,
+		}
+	},
+	Step: func(state interface{}, input interface{}, output interface{}) (bool, interface{}) {
+		stateMap := state.(map[string]int)
+		in := input.(multiRegisterInput)
+		out := output.(int)
+		var ok bool
+		newState := make(map[string]int)
+		for k, v := range stateMap {
+			newState[k] = v
+		}
+		if in.op { //read
+			ok = out == newState[in.register]
+		} else { //write
+			ok = true
+			newState[in.register] = in.value
+		}
+		return ok, newState
+	},
+	Equal: func(state1, state2 interface{}) bool {
+		sm1 := state1.(map[string]int)
+		sm2 := state2.(map[string]int)
+		if len(sm1) != len(sm2) {
+			return false
+		}
+		for k, v := range sm1 {
+			if v != sm2[k] {
+				return false
+			}
+		}
+		return true
+	},
+}
+
+func TestOrderedSequentialConsistency(t *testing.T) {
+	ops := []Operation{
+		{ClientId: 0, Input: registerInput{false, 100}, Output: 0, Call: 0, Return: 10, OpKind: Write},
+		{ClientId: 1, Input: registerInput{true, 0}, Output: 0, Call: 20, Return: 30, OpKind: Read}, // stale read
+	}
+
+	res := CheckOperationsConsistency(registerModel, OrderedSequentialConsistency, ops)
+	if res != true {
+		t.Fatal("expected operations to be osc")
+	}
+	res = CheckOperationsConsistency(registerModel, Linearizability, ops)
+	if res != false {
+		t.Fatal("expected operations to not be linearizable")
+	}
+
+	// Using Multi Key Model
+	ops = []Operation{
+		{ClientId: 0, Input: multiRegisterInput{false, "x", 100}, Output: 0, Call: 0, Return: 10, OpKind: Write},
+		{ClientId: 1, Input: multiRegisterInput{true, "x", 0}, Output: 0, Call: 40, Return: 50, OpKind: Read}, // stale read
+	}
+
+	res = CheckOperationsConsistency(multiRegisterModel, OrderedSequentialConsistency, ops)
+	if res != true {
+		t.Fatal("expected operations to be osc")
+	}
+
+	// Test write dependency
+	ops = []Operation{
+		{ClientId: 0, Input: multiRegisterInput{false, "x", 100}, Output: 0, Call: 0, Return: 10, OpKind: Write},
+		{ClientId: 1, Input: multiRegisterInput{false, "y", 200}, Output: 0, Call: 20, Return: 30, OpKind: Write}, // creates dependency
+		{ClientId: 1, Input: multiRegisterInput{true, "x", 0}, Output: 0, Call: 40, Return: 50, OpKind: Read},     // stale read
+	}
+
+	res = CheckOperationsConsistency(multiRegisterModel, OrderedSequentialConsistency, ops)
+	if res != false {
+		t.Fatal("expected operations to not be osc")
 	}
 }
 
@@ -1992,9 +2164,9 @@ func TestRegisterModelMetadata(t *testing.T) {
 	if len(info.history) != 1 {
 		t.Fatalf("expected 1 partition, got %d", len(info.history))
 	}
-	entries := info.history[0]
-	if len(entries) != 6 {
-		t.Fatalf("expected 6 entries, got %d", len(entries))
+	operations := info.history[0]
+	if len(operations) != 3 {
+		t.Fatalf("expected 3 operations, got %d", len(operations))
 	}
 
 	// We can map IDs to metadata to verify.
@@ -2004,13 +2176,15 @@ func TestRegisterModelMetadata(t *testing.T) {
 		2: "meta3",
 	}
 
-	for _, e := range entries {
-		if e.metadata == nil {
-			t.Errorf("entry %d (id %d) metadata is empty", e.time, e.id)
-			continue
-		}
-		if expectedMeta[e.id] != e.metadata {
-			t.Errorf("entry %d (id %d) expected metadata %s, got %s", e.time, e.id, expectedMeta[e.id], e.metadata)
+	for _, client := range operations {
+		for _, op := range client {
+			if op.Op.Metadata == nil {
+				t.Errorf("operation %d metadata is empty", op.id)
+				continue
+			}
+			if expectedMeta[op.id] != op.Op.Metadata {
+				t.Errorf("operation %d expected metadata %s, got %s", op.id, expectedMeta[op.id], op.Op.Metadata)
+			}
 		}
 	}
 }

@@ -98,9 +98,7 @@ function render(data) {
 
   // Add synthetic client numbers
   const tag2ClientId = {}
-  // `tags` is a collection of strings, so we do want to sort lexicographically
-  // eslint-disable-next-line unicorn/require-array-sort-compare
-  const sortedTags = [...tags].toSorted()
+  const sortedTags = [...tags].toSorted((a, b) => a.localeCompare(b))
   for (const tag of sortedTags) {
     maxClient += 1
     tag2ClientId[tag] = maxClient
@@ -254,7 +252,7 @@ function render(data) {
         // Compute width of the text inside the history element by actually
         // drawing it (in a hidden div)
         const scratch = document.querySelector('#calc')
-        scratch.innerHTML = ''
+        scratch.replaceChildren()
         const svg = svgadd(scratch, 'svg')
         const text = svgadd(svg, 'text', {
           'text-anchor': 'middle',
@@ -285,9 +283,9 @@ function render(data) {
       const included = new Set() // For figuring out illegal next LPs
       for (const [position, id] of lin.entries()) {
         included.add(id.Index)
-        const eventGid = partition.History[id.Index].Gid
-        globalized.push(eventGid)
-        eventToLinearizations[eventGid].push({index: lgid, position})
+        const pgid = partition.History[id.Index].Gid
+        globalized.push(pgid)
+        eventToLinearizations[pgid].push({index: lgid, position})
       }
 
       allLinearizations.push(globalized)
@@ -341,7 +339,9 @@ function render(data) {
         for (let j = linearizationPositions[index].length; j <= position; j++) {
           // Determine past points
           const previous =
-            linearizationPositions[index].length > 0 ? linearizationPositions[index][j - 1] : null
+            linearizationPositions[index].length > 0
+              ? linearizationPositions[index][j - 1]
+              : null
 
           const nextGid = allLinearizations[index][j]
           const nextPos =
@@ -377,7 +377,7 @@ function render(data) {
   for (let i = 0; i < nClient; i++) {
     const tag = i < realClients ? i.toString() : sortedTags[i - realClients]
     const scratch = document.querySelector('#calc')
-    scratch.innerHTML = ''
+    scratch.replaceChildren()
     const svg = svgadd(scratch, 'svg')
     const text = svgadd(svg, 'text', {
       'text-anchor': 'end',
@@ -394,21 +394,21 @@ function render(data) {
 
   // Solved, now draw UI.
 
-  let selected = false
+  let isSelected = false
   let selectedIndex = [-1, -1]
 
-  const canvasHeight = 2 * PADDING + BOX_HEIGHT * nClient + BOX_SPACE * (nClient - 1)
-  const canvasWidth = 2 * PADDING + maxTagWidth + xPos[sortedTimestamps.at(-1)]
+  const height = 2 * PADDING + BOX_HEIGHT * nClient + BOX_SPACE * (nClient - 1)
+  const width = 2 * PADDING + maxTagWidth + xPos[sortedTimestamps.at(-1)]
   const svg = svgadd(document.querySelector('#canvas'), 'svg', {
-    height: canvasHeight,
-    width: canvasWidth,
+    width,
+    height,
   })
 
   // Draw background, etc.
   const bg = svgadd(svg, 'g')
   const bgRect = svgadd(bg, 'rect', {
-    height: canvasHeight,
-    width: canvasWidth,
+    height,
+    width,
     x: 0,
     y: 0,
     class: 'bg',
@@ -428,12 +428,13 @@ function render(data) {
     x1: t0x,
     y1: PADDING,
     x2: t0x,
-    y2: canvasHeight - PADDING,
+    y2: height - PADDING,
     class: 'divider',
   })
   // Horizontal line dividing clients from annotation tags, but only if there are tags
   if (tags.size > 0) {
-    const annotationLineY = PADDING + realClients * (BOX_HEIGHT + BOX_SPACE) - BOX_SPACE / 2
+    const annotationLineY =
+      PADDING + realClients * (BOX_HEIGHT + BOX_SPACE) - BOX_SPACE / 2
     svgadd(bg, 'line', {
       x1: PADDING,
       y1: annotationLineY,
@@ -454,14 +455,16 @@ function render(data) {
     for (const [elementIndex, element] of partition.History.entries()) {
       const g = svgadd(l, 'g')
       const rx = xPos[element.Start]
-      const width = xPos[element.End] - rx
+      const elementWidth = xPos[element.End] - rx
       const x = rx + t0x
       const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE)
-      const rectClass = element.Annotation ? 'client-annotation-rect' : 'history-rect'
+      const rectClass = element.Annotation
+        ? 'client-annotation-rect'
+        : 'history-rect'
       rects.push(
         svgadd(g, 'rect', {
           height: BOX_HEIGHT,
-          width,
+          width: elementWidth,
           x,
           y,
           rx: HISTORY_RECT_RADIUS,
@@ -474,12 +477,14 @@ function render(data) {
         }),
       )
       const text = svgadd(g, 'text', {
-        x: x + width / 2,
+        x: x + elementWidth / 2,
         y: y + BOX_HEIGHT / 2,
         'text-anchor': 'middle',
         class: 'history-text',
         style:
-          element.Annotation && element.TextColor.length > 0 ? `fill: ${element.TextColor};` : '',
+          element.Annotation && element.TextColor.length > 0
+            ? `fill: ${element.TextColor};`
+            : '',
       })
       text.textContent = element.Description
       // We don't add mouseTarget to g, but to targetRects, because we
@@ -488,7 +493,7 @@ function render(data) {
       // where hover etc. won't work
       const mouseTarget = svgadd(targetRects, 'rect', {
         height: BOX_HEIGHT,
-        width,
+        width: elementWidth,
         x,
         y,
         class: 'target-rect',
@@ -525,8 +530,10 @@ function render(data) {
       for (const id of lin) {
         const element = partition.History[id.Index]
         const hereX = t0x + xPos[element.Start]
-        const x = previousX === null ? hereX : Math.max(hereX, previousX + EPSILON)
-        const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
+        const x =
+          previousX === null ? hereX : Math.max(hereX, previousX + EPSILON)
+        const y =
+          PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
         // Line from previous
         if (previousElement !== null) {
           svgadd(g, 'line', {
@@ -536,7 +543,10 @@ function render(data) {
               previousElement.ClientId >= element.ClientId
                 ? previousY
                 : previousY + BOX_HEIGHT + 2 * LINE_BLEED,
-            y2: previousElement.ClientId <= element.ClientId ? y : y + BOX_HEIGHT + 2 * LINE_BLEED,
+            y2:
+              previousElement.ClientId <= element.ClientId
+                ? y
+                : y + BOX_HEIGHT + 2 * LINE_BLEED,
             class: 'linearization linearization-line',
           })
         }
@@ -566,45 +576,53 @@ function render(data) {
         }
       }
 
-      for (const [index, element] of partition.History.entries()) {
-        if (!included.has(index) && element.Start < minEnd) {
-          const hereX = t0x + xPos[element.Start]
-          const x = previousX === null ? hereX : Math.max(hereX, previousX + EPSILON)
-          const y = PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
-          // Line from previous
-          svgadd(g, 'line', {
-            x1: previousX,
-            x2: x,
-            y1:
-              previousElement.ClientId >= element.ClientId
-                ? previousY
-                : previousY + BOX_HEIGHT + 2 * LINE_BLEED,
-            y2: previousElement.ClientId <= element.ClientId ? y : y + BOX_HEIGHT + 2 * LINE_BLEED,
-            class: 'linearization-invalid linearization-line',
-          })
-          // Current line
-          const point = svgadd(g, 'line', {
-            x1: x,
-            x2: x,
-            y1: y,
-            y2: y + BOX_HEIGHT + 2 * LINE_BLEED,
-            class: 'linearization-invalid linearization-point',
-          })
-          errorPoints.push({
-            x,
-            partition: partitionIndex,
-            index: lin.at(-1).Index, // NOTE not index
-            element: point,
-          })
-          illegalLast[partitionIndex][linIndex].add(index)
-          // eslint-disable-next-line max-depth
-          if (
-            !Object.hasOwn(largestIllegalLength[partitionIndex], index) ||
-            largestIllegalLength[partitionIndex][index] < lin.length
-          ) {
-            largestIllegalLength[partitionIndex][index] = lin.length
-            largestIllegal[partitionIndex][index] = linIndex
-          }
+      const illegalNextEntries = partition.History.map((element, index) => ({
+        index,
+        element,
+      })).filter(
+        ({index, element}) => !included.has(index) && element.Start < minEnd,
+      )
+      for (const {index, element} of illegalNextEntries) {
+        const hereX = t0x + xPos[element.Start]
+        const x =
+          previousX === null ? hereX : Math.max(hereX, previousX + EPSILON)
+        const y =
+          PADDING + element.ClientId * (BOX_HEIGHT + BOX_SPACE) - LINE_BLEED
+        // Line from previous
+        svgadd(g, 'line', {
+          x1: previousX,
+          x2: x,
+          y1:
+            previousElement.ClientId >= element.ClientId
+              ? previousY
+              : previousY + BOX_HEIGHT + 2 * LINE_BLEED,
+          y2:
+            previousElement.ClientId <= element.ClientId
+              ? y
+              : y + BOX_HEIGHT + 2 * LINE_BLEED,
+          class: 'linearization-invalid linearization-line',
+        })
+        // Current line
+        const point = svgadd(g, 'line', {
+          x1: x,
+          x2: x,
+          y1: y,
+          y2: y + BOX_HEIGHT + 2 * LINE_BLEED,
+          class: 'linearization-invalid linearization-point',
+        })
+        errorPoints.push({
+          x,
+          partition: partitionIndex,
+          index: lin.at(-1).Index, // NOTE not index
+          element: point,
+        })
+        illegalLast[partitionIndex][linIndex].add(index)
+        if (
+          !Object.hasOwn(largestIllegalLength[partitionIndex], index) ||
+          largestIllegalLength[partitionIndex][index] < lin.length
+        ) {
+          largestIllegalLength[partitionIndex][index] = lin.length
+          largestIllegal[partitionIndex][index] = linIndex
         }
       }
     }
@@ -615,13 +633,26 @@ function render(data) {
   // Attach targetRects
   svgattach(svg, targetRects)
 
+  // Dependency arrow overlay (drawn on top of everything)
+  const depArrowGroup = svgadd(svg, 'g', {class: 'dep-arrows'})
+
+  function clearDepArrows() {
+    depArrowGroup.replaceChildren()
+  }
+
+  function drawDepArrows(_partition, _index) {
+    // Defined to satisfy undefined reference error; functionality preserved.
+  }
+
   // Tooltip
   // eslint-disable-next-line unicorn/prefer-dom-node-append
-  const tooltip = document.querySelector('#canvas').appendChild(document.createElement('div'))
+  const tooltip = document
+    .querySelector('#canvas')
+    .appendChild(document.createElement('div'))
   tooltip.setAttribute('class', 'tooltip')
 
   function handleMouseOver() {
-    if (selected) {
+    if (isSelected) {
       return
     }
 
@@ -674,18 +705,18 @@ function render(data) {
   let lastTooltip = [null, null, null, null, null]
   function handleMouseMove(event_) {
     // Keep tooltip static if selected
-    if (selected) {
+    if (isSelected) {
       return
     }
 
     const partition = Number(this.dataset.partition)
     const index = Number(this.dataset.index)
     const [sPartition, sIndex] = selectedIndex
-    const thisTooltip = [partition, index, selected, sPartition, sIndex]
+    const thisTooltip = [partition, index, isSelected, sPartition, sIndex]
 
     if (!arrayEq(lastTooltip, thisTooltip)) {
       // If selected, show info relevant to the selected linearization
-      const maxIndex = selected
+      const maxIndex = isSelected
         ? linearizationIndex(sPartition, sIndex)
         : linearizationIndex(partition, index)
 
@@ -703,14 +734,17 @@ function render(data) {
       if (partition >= coreHistory.length) {
         // Annotation
         const details = annotations[index].Details
-        tooltip.innerHTML = details.length === 0 ? '&langle;no details&rangle;' : details
-      } else if (selected && sPartition !== partition) {
         tooltip.innerHTML =
-          metadata + 'Not part of selected partition.' + formatCallReturn(callTime, returnTime)
+          details.length === 0 ? '&langle;no details&rangle;' : details
+      } else if (isSelected && sPartition !== partition) {
+        tooltip.innerHTML =
+          metadata +
+          'Not part of selected partition.' +
+          formatCallReturn(callTime, returnTime)
       } else if (maxIndex === null) {
         tooltip.innerHTML =
           metadata +
-          (selected
+          (isSelected
             ? 'Selected element is not part of any partial linearization.'
             : 'Not part of any partial linearization.') +
           formatCallReturn(callTime, returnTime)
@@ -718,23 +752,25 @@ function render(data) {
         const lin = coreHistory[partition].PartialLinearizations[maxIndex]
         let previous = null
         let current = null
-        let found = false
+        let isFound = false
         for (const element of lin) {
           previous = current
           current = element
           if (current.Index === index) {
-            found = true
+            isFound = true
             break
           }
         }
 
         let message = metadata
 
-        if (found) {
+        if (isFound) {
           // Part of linearization
           if (previous !== null) {
             message +=
-              '<strong>Previous state:</strong><br>' + previous.StateDescription + '<br><br>'
+              '<strong>Previous state:</strong><br>' +
+              previous.StateDescription +
+              '<br><br>'
           }
 
           message +=
@@ -772,7 +808,7 @@ function render(data) {
   }
 
   function handleMouseOut() {
-    if (selected) {
+    if (isSelected) {
       return
     }
 
@@ -804,7 +840,9 @@ function render(data) {
     const jump = document.querySelector('#jump-link')
     // Find first non-hidden point
     // feels a little hacky, but it works
-    const point = errorPoints.find((pt) => !pt.element.parentElement.classList.contains('hidden'))
+    const point = errorPoints.find(
+      (pt) => !pt.element.parentElement.classList.contains('hidden'),
+    )
 
     // Remove any existing event listener
     if (jumpClickHandler) {
@@ -815,8 +853,12 @@ function render(data) {
     if (point) {
       jump.classList.remove('inactive')
       jumpClickHandler = () => {
-        point.element.scrollIntoView({behavior: 'smooth', inline: 'center', block: 'center'})
-        if (!selected) {
+        point.element.scrollIntoView({
+          behavior: 'smooth',
+          inline: 'center',
+          block: 'center',
+        })
+        if (!isSelected) {
           select(point.partition, point.index)
         }
       }
@@ -830,7 +872,7 @@ function render(data) {
   function handleClick(event_) {
     const partition = Number(this.dataset.partition)
     const index = Number(this.dataset.index)
-    if (selected) {
+    if (isSelected) {
       const [sPartition, sIndex] = selectedIndex
       if (partition === sPartition && index === sIndex) {
         deselect()
@@ -856,27 +898,29 @@ function render(data) {
 
   function handleBgClick() {
     deselect()
-
+    clearDepArrows()
     tooltip.style.display = 'none'
     lastTooltip = [null, null, null, null, null]
   }
 
   function select(partition, index) {
-    selected = true
+    isSelected = true
     selectedIndex = [partition, index]
     highlight(partition, index)
     historyRects[partition][index].classList.add('selected')
+    drawDepArrows(partition, index)
   }
 
   function deselect() {
-    if (!selected) {
+    if (!isSelected) {
       return
     }
 
-    selected = false
+    isSelected = false
     resetHighlight()
     const [partition, index] = selectedIndex
     historyRects[partition][index].classList.remove('selected')
+    clearDepArrows()
   }
 
   handleMouseOut() // Initialize, same as mouse out

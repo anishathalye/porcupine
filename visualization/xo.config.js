@@ -21,7 +21,10 @@ export default [
     rules: {
       '@html-eslint/attrs-newline': 'off',
       '@html-eslint/indent': ['error', 2],
-      '@html-eslint/no-extra-spacing-tags': ['error', {enforceBeforeSelfClose: true}],
+      '@html-eslint/no-extra-spacing-tags': [
+        'error',
+        {enforceBeforeSelfClose: true},
+      ],
       '@html-eslint/require-closing-tags': ['error', {selfClosing: 'always'}],
       '@html-eslint/require-meta-description': 'off',
       '@html-eslint/require-open-graph-protocol': 'off',

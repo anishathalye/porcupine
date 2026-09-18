@@ -6,6 +6,15 @@ import (
 	"strings"
 )
 
+type OperationKind int
+
+const (
+	Read      OperationKind = 0
+	Write     OperationKind = 1
+	RMW       OperationKind = 2
+	UnknownOp OperationKind = 3
+)
+
 // An Operation is an element of a history.
 //
 // This package supports two different representations of histories, as a
@@ -17,15 +26,17 @@ import (
 // operation with interval [10, 20] is concurrent with another operation with
 // interval [20, 30].
 type Operation struct {
-	ClientId int // optional, unless you want a visualization; zero-indexed
+	ClientId int           // optional, unless you want a visualization; zero-indexed
+	OpKind   OperationKind // read, write, rmw?
 	Input    interface{}
 	Call     int64 // invocation timestamp
 	Output   interface{}
 	Return   int64 // response timestamp
 	// Metadata contains arbitrary metadata associated with the operation.
 	// It is not used for linearizability checking but can be used for visualization.
-	Metadata interface{}
-	_        struct{} // disallow positional literals, for extensibility
+	Metadata  interface{}
+	OrderHint interface{}
+	_         struct{} // disallow positional literals, for extensibility
 }
 
 // Interpreting the interval [Call, Return] as a closed interval is the only
@@ -67,12 +78,14 @@ const (
 type Event struct {
 	ClientId int // optional, unless you want a visualization; zero-indexed
 	Kind     EventKind
+	OpKind   OperationKind
 	Value    interface{}
 	Id       int
 	// Metadata contains arbitrary metadata associated with the operation.
 	// It is not used for linearizability checking but can be used for visualization.
 	// Can be set on CallEvent or ReturnEvent. If both have metadata, ReturnEvent metadata takes precedence.
 	Metadata interface{}
+	Hint     interface{}
 	_        struct{} // disallow positional literals, for extensibility
 }
 

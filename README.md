@@ -1,11 +1,11 @@
 # Porcupine [![Build Status](https://github.com/anishathalye/porcupine/actions/workflows/ci.yml/badge.svg)](https://github.com/anishathalye/porcupine/actions/workflows/ci.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/anishathalye/porcupine)](https://pkg.go.dev/github.com/anishathalye/porcupine)
 
-Porcupine is a fast linearizability checker [used](#users) in both academia and
+Porcupine is a fast consistency checker [used](#users) in both academia and
 industry for testing the correctness of distributed systems. It takes a
-sequential specification as executable Go code, along with a concurrent
-history, and it determines whether the history is linearizable with respect to
-the sequential specification. Porcupine also implements a visualizer for
-histories and linearization points.
+sequential specification as executable Go code, along with a concurrent history
+and a consistency model, and it determines whether the history is consistent
+with respect to the sequential specification. Porcupine also implements a
+visualizer for histories and serialization points.
 
 <p align="center">
 <a href="https://anishathalye.github.io/porcupine/ex-2.html">
@@ -15,25 +15,35 @@ histories and linearization points.
 (click for interactive version)
 </p>
 
-Porcupine implements the algorithm described in [Faster linearizability
-checking via P-compositionality][faster-linearizability-checking], an
-optimization of the algorithm described in [Testing for
-Linearizability][linearizability-testing].
+Porcupine implements the P-compositionality optimization from [Faster
+linearizability checking via
+P-compositionality](https://arxiv.org/pdf/1504.00204) alongside the DAG-based
+checking algorithm introduced in [Generalizing and accelerating consistency
+checking for non-transactional distributed storage systems
+](https://arxiv.org/pdf/2608.17388). By generalizing the classic Wing-Gong
+linearizability checking algorithm, Porcupine can check for a broad set of
+non-transactional consistency guarantees that are stronger than sequential
+consistency, such as ordered sequential consistency and regular sequential
+consistency. It allows usage of both hard and soft ordering constraints.
+Porcupine also supports checking system-specific consistency guarantees by
+utilizing ordering hints provided by the storage system.
 
 Porcupine is faster and can handle more histories than [Knossos][knossos]'s
 linearizability checker. Testing on the data in `test_data/jepsen/`, Porcupine
 is generally **1,000x**-**10,000x** faster and has a much smaller memory
 footprint. On histories where it can take advantage of P-compositionality,
-Porcupine can be millions of times faster.
+Porcupine can be millions of times faster. When checking for system-specific
+consistency guarantees, Porcupine can be up to 370x faster and can scale to more
+concurrent clients within the same checking time budget.
 
 ## Usage
 
 Porcupine takes an executable model of a system along with a history, and it
-runs a decision procedure to determine if the history is linearizable with
+runs a decision procedure to determine if the history is serializable with
 respect to the model. Porcupine supports specifying history in two ways, either
 as a list of operations with given call and return times, or as a list of
 call/return events in time order. Porcupine can also visualize histories, along
-with partial linearizations, which may aid in debugging.
+with partial serializations, which may aid in debugging.
 
 See the [documentation] for how to write a [model][porcupine-doc-model] and
 [specify histories][porcupine-doc-history]. You can also check out some
@@ -41,8 +51,8 @@ See the [documentation] for how to write a [model][porcupine-doc-model] and
 
 Once you've written a model and have a history, you can use the
 [`CheckOperations`][CheckOperations] and [`CheckEvents`][CheckEvents] functions
-to determine if your history is linearizable. If you want to visualize a
-history, along with partial linearizations, you can use the
+to determine if your history is serializable. If you want to visualize a
+history, along with partial serializations, you can use the
 [`Visualize`][Visualize] function.
 
 [documentation]: https://pkg.go.dev/github.com/anishathalye/porcupine
@@ -171,6 +181,119 @@ ok := porcupine.CheckEvents(registerModel, events)
 See [`porcupine_test.go`](porcupine_test.go) for more examples on how to write
 models and histories.
 
+### Testing a general consistency model
+
+The paper [Consistency in Non-Transactional Distributed Storage Systems](https://dl.acm.org/doi/pdf/10.1145/2926965) decomposes and
+classifies many commonly used consistency models.  For example, Linearizability
+can be decomposed into three properties:
+$$\text{Linearizability}(\mathcal{F}) \triangleq \text{SingleOrder} \land \text{RealTime} \land \text{RVal}(\mathcal{F})$$
+where
+$\mathcal{F}$ represents the given sequential specification.
+
+* SingleOrder is the condition that there exists a sequential history equivalent to the
+given history.
+* RealTime enforces that return-before orders must be preserved in the
+equivalent sequential history.
+* RVal enforces that the equivalent sequential history must be allowed by the sequential
+specification.
+
+Most consistency models can be decomposed similarly into three properties:
+SingleOrder, an ordering guarantee, and a validity guarantee.
+
+
+An Ordering guarantee is represented using `Oracle`. It defines the ordering
+between operations in the sequential history. Orders can be either hard or soft.
+Soft orders can be used when violating the order does not break consistency. Below,
+we show the oracle for RealTime:
+
+```go
+var RealTime = porcupine.Oracle{
+	Compare: func(a *porcupine.Operation, b *porcupine.Operation) (porcupine.OrderKind, error) {
+		if a.Return < b.Call {
+			return porcupine.HardBefore, nil
+		}
+		if a.Call > b.Return {
+			return porcupine.HardAfter, nil
+		}
+		return porcupine.Unconstrained, nil
+	},
+}
+```
+
+The Compare function compares two operations and returns the ordering
+relationship between them. The oracle can return one of 5 ordering outcomes:
+
+* HardBefore indicates that `a` must be ordered before `b`.
+* HardAfter indicates that `a` must be ordered after `b`.
+* SoftBefore indicates that `a` should usually precede `b` in normal
+  circumstances, acting as a soft constraint. The algorithm modifies the standard
+  topological order finding to prioritize picking operations within the current
+  frontier using these soft edges.
+* SoftAfter indicates that `a` should usually follow `b` in normal
+  circumstances, acting as a soft constraint.
+* Unconstrained indicates that there is no ordering constraint between `a` and
+  `b`.
+
+Beyond standard models like RealTime, Oracle functions can be used to check
+system-specific consistency guarantees. By adding system-specific ordering hints
+(like a revision number in etcd or a zxid in ZooKeeper) within responses, these
+hints can be used in the custom Compare logic. Because these constraints reduce
+the number of possible operation permutations the checker needs to try, it
+significantly accelerates checking.
+
+For performance reasons, the comparator implicitly contains session-order
+relations, i.e., ordering between operations from the same client session.
+Hence, the consistency model must be stronger than PRAM.
+
+A validity guarantee is represented using `Validity`. It defines the allowed
+sequence of operations in the sequential history. For example, the validity for
+a model which allows bounded stale reads (i.e., a read can return any value which
+was written by one of the last K writes) is as follows:
+
+```go
+var kBoundedReadsValidity = porcupine.Validity{
+    Init: func(model Model) interface{} {
+        return []int{model.Init()}
+    },
+    Step: func(states, input, output interface{}, model Model) (bool, interface{}) {
+        regInput := input.(registerInput)
+        pastStates := states.([]int)
+        if regInput.op { // get
+        // Check if read is valid against
+        // any of last K states
+        for _, s := range pastStates {
+            ok, _ := model.Step(s, input, output)
+            if ok {
+                return ok, pastStates
+            }
+        }
+        return false, pastStates
+        } else { // put
+            l := len(pastStates)
+            ok, newState := model.Step(pastStates[l-1], input, output)
+            // Truncate to K-1 states
+            if l >= K {
+            pastStates = pastStates[l-K+1:]
+            }
+            states = append(pastStates, newState.(int))
+            return ok, states
+        }
+    },
+}
+```
+
+The consistency model is then a combination of an oracle and a validity. The consistency model for K-Bounded staleness is
+
+```go
+kBoundedReadsConsistency = porcupine.Consistency{
+    Oracles: {RealTime},
+    Valid: kBoundedReadsValidity,
+}
+```
+
+To check general consistency models, use `porcupine.checkEventsConsistency()` or
+`porcupine.CheckOperationsConsistency()`.
+
 ### Visualizing histories
 
 Porcupine provides functionality to visualize histories, along with the
@@ -239,7 +362,9 @@ from servers or the test framework. You can do this using the
 - If Porcupine runs really slowly on your model/history, it may be inevitable,
   due to state space explosion. See [this
   issue](https://github.com/anishathalye/porcupine/issues/6) for a discussion
-  of this challenge in the context of a particular model and history.
+  of this challenge in the context of a particular model and history. Utilizing
+  system-specific consistency checking with ordering hints can often drastically
+  reduce this search space.
 - When recording timestamps for operations, especially on ARM and other
   weakly-ordered architectures, you may need to use memory barriers or atomic
   operations to ensure accurate measurements and avoid spurious linearizability
