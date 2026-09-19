@@ -703,7 +703,7 @@ function render(data) {
       if (partition >= coreHistory.length) {
         // Annotation
         const details = annotations[index].Details
-        tooltip.innerHTML = details.length === 0 ? '&langle;no details&rangle;' : details
+        tooltip.textContent = details.length === 0 ? '⟨no details⟩' : details
       } else if (selected && sPartition !== partition) {
         tooltip.innerHTML =
           metadata + 'Not part of selected partition.' + formatCallReturn(callTime, returnTime)
